@@ -1,0 +1,70 @@
+# A starting policy. Copy it, then adjust the agents and namespaces to your
+# cluster. Reference: docs/policy.md
+apiVersion: kubeamber.dev/v1alpha1
+kind: Policy
+metadata:
+  name: default
+spec:
+  # Who counts as an AI agent. KubeAmber never touches requests from anyone else.
+  agents:
+    # Every service account in the kubeamber-agents namespace. Run in-cluster
+    # agents (kagent, HolmesGPT, your own) under service accounts there.
+    - name: sre-agent
+      serviceAccounts: ["kubeamber-agents/*"]
+    # Agents on a workstation (Claude Code, kubectl-ai, Cursor, ...) that use a
+    # kubeconfig whose client certificate or OIDC token carries this group.
+    - name: workstation-agents
+      groups: ["kubeamber:agents"]
+    # HolmesGPT installed with its Helm chart's default service account:
+    # - name: holmesgpt
+    #   serviceAccounts: ["holmesgpt/holmesgpt-holmes-service-account"]
+
+  # Risk score (0-100) at which a change is held for a human, or denied.
+  thresholds:
+    hold: 30
+    deny: 80
+
+  # Changes here score +25.
+  protectedNamespaces: ["kube-system", "kube-public", "prod", "prod-*"]
+
+  # Evaluated in order; the first match applies. An "allow" rule overrides the
+  # risk score, but freeze windows, guards and KubeAmber's built-in
+  # self-protection still apply.
+  rules:
+    - name: no-rbac-changes
+      match:
+        kinds: [Role, RoleBinding, ClusterRole, ClusterRoleBinding]
+      action: deny
+      reason: agents may not change RBAC, because that would let them grant themselves more power
+    - name: scratch-namespaces
+      match:
+        namespaces: ["sandbox-*"]
+      action: allow
+      reason: agents may experiment freely in sandbox namespaces
+
+  # No unattended agent changes to production on Friday evenings.
+  freezeWindows:
+    - name: friday-evening
+      days: [Fri]
+      start: "17:00"
+      end: "24:00"
+      timeZone: Asia/Kolkata
+      namespaces: ["prod", "prod-*"]
+      action: hold
+
+  approvals:
+    # An approved change must be retried within this time.
+    ttl: 15m
+    # A held change waits this long for a human.
+    pendingTTL: 1h
+
+  # Escalate agent changes while an SLO is burning its error budget.
+  # guards:
+  #   prometheus:
+  #     url: http://prometheus-operated.monitoring:9090
+  #     checks:
+  #       - name: checkout-fast-burn
+  #         query: 'slo:sli_error:ratio_rate1h{service="checkout"} > 14.4 * 0.001'
+  #         namespaces: ["prod"]
+  #         action: hold
+  #         reason: checkout is burning its error budget; a human should approve changes until it recovers

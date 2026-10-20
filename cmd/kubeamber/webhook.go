@@ -1,0 +1,150 @@
+package main
+
+import (
+	"context"
+	"crypto/tls"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/spf13/cobra"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+
+	"github.com/kubeamber/kubeamber/internal/changerequest"
+	"github.com/kubeamber/kubeamber/internal/guards"
+	"github.com/kubeamber/kubeamber/internal/kube"
+	"github.com/kubeamber/kubeamber/internal/telemetry"
+	"github.com/kubeamber/kubeamber/internal/version"
+	"github.com/kubeamber/kubeamber/internal/webhook"
+	"github.com/kubeamber/kubeamber/pkg/decide"
+	"github.com/kubeamber/kubeamber/pkg/policy"
+)
+
+func webhookCmd(kf *kube.Flags) *cobra.Command {
+	var o struct {
+		policy, addr, certFile, keyFile           string
+		namespace, serviceAccount, service        string
+		webhookConfig, admissionPolicy, tlsSecret string
+		reload                                    time.Duration
+	}
+	cmd := &cobra.Command{
+		Use:   "webhook",
+		Short: "Run the admission webhook (inside the cluster)",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx := cmd.Context()
+			log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+			slog.SetDefault(log)
+
+			shutdown, err := telemetry.Setup(ctx, version.Version)
+			if err != nil {
+				return fmt.Errorf("telemetry: %w", err)
+			}
+			defer func() { _ = shutdown(context.Background()) }()
+
+			p, err := policy.Load(o.policy)
+			if err != nil {
+				return err
+			}
+			current := policy.NewCurrent(p)
+
+			cfg, err := kf.Config()
+			if err != nil {
+				return err
+			}
+			cs, err := kubernetes.NewForConfig(cfg)
+			if err != nil {
+				return err
+			}
+			dyn, err := dynamic.NewForConfig(cfg)
+			if err != nil {
+				return err
+			}
+			selfUser := policy.ServiceAccountUsername(o.namespace + "/" + o.serviceAccount)
+			if a := p.MatchAgent(selfUser, nil); a != nil {
+				return fmt.Errorf("policy agent %q matches KubeAmber's own service account %s", a.Name, selfUser)
+			}
+
+			var tlsCfg *tls.Config
+			var caPEM []byte
+			if o.certFile != "" {
+				cert, err := tls.LoadX509KeyPair(o.certFile, o.keyFile)
+				if err != nil {
+					return err
+				}
+				tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+			} else {
+				certs := &webhook.Certs{Client: cs, Namespace: o.namespace, SecretName: o.tlsSecret, ServiceName: o.service}
+				cert, ca, err := certs.Ensure(ctx)
+				if err != nil {
+					return err
+				}
+				caPEM = ca
+				tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+			}
+
+			configurator := &webhook.Configurator{Client: cs, Name: o.webhookConfig, AdmissionPolicy: o.admissionPolicy, SelfUser: selfUser}
+			sync := func(p *policy.Policy) {
+				changed, err := configurator.Sync(ctx, caPEM, p)
+				switch {
+				case err != nil:
+					log.Error("syncing webhook configuration", "error", err)
+				case changed:
+					log.Info("webhook configuration updated", "agents", len(p.Spec.Agents))
+				}
+			}
+			sync(p)
+			go current.Watch(ctx, o.policy, o.reload, log, sync)
+
+			engine := &decide.Engine{
+				Policy: current.Get,
+				Guard:  guards.NewPrometheus(),
+				Self:   decide.Self{Namespace: o.namespace, WebhookName: o.webhookConfig},
+			}
+			h := webhook.NewHandler(webhook.Handler{
+				Engine: engine, Store: &changerequest.Store{Client: dyn}, Policy: current.Get,
+				SelfUser: selfUser, Log: log,
+			})
+
+			mux := http.NewServeMux()
+			mux.Handle("/validate", h)
+			mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
+			srv := &http.Server{Addr: o.addr, Handler: mux, TLSConfig: tlsCfg, ReadHeaderTimeout: 10 * time.Second}
+			go func() {
+				<-ctx.Done()
+				sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				_ = srv.Shutdown(sctx)
+			}()
+			log.Info("kubeamber webhook listening", "addr", o.addr, "version", version.Version,
+				"policy", p.Metadata.Name, "agents", len(p.Spec.Agents), "telemetry", telemetry.Enabled())
+			if err := srv.ListenAndServeTLS("", ""); !errors.Is(err, http.ErrServerClosed) {
+				return err
+			}
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&o.policy, "policy", "/etc/kubeamber/policy.yaml", "policy file")
+	f.StringVar(&o.addr, "addr", ":9443", "HTTPS listen address")
+	f.StringVar(&o.certFile, "tls-cert-file", "", "serving certificate (default: self-managed in a Secret)")
+	f.StringVar(&o.keyFile, "tls-key-file", "", "serving key")
+	f.StringVar(&o.namespace, "namespace", envOr("POD_NAMESPACE", "kubeamber-system"), "namespace KubeAmber runs in")
+	f.StringVar(&o.serviceAccount, "service-account", envOr("SERVICE_ACCOUNT", "kubeamber"), "KubeAmber's service account")
+	f.StringVar(&o.service, "service", "kubeamber", "webhook Service name")
+	f.StringVar(&o.webhookConfig, "webhook-config", "kubeamber", "ValidatingWebhookConfiguration name")
+	f.StringVar(&o.admissionPolicy, "admission-policy", "kubeamber-protect-admission", "ValidatingAdmissionPolicy that blocks agents from changing admission webhooks (empty to skip)")
+	f.StringVar(&o.tlsSecret, "tls-secret", "kubeamber-webhook-tls", "Secret holding the self-managed certificate")
+	f.DurationVar(&o.reload, "reload-interval", 5*time.Second, "how often to check the policy file for changes")
+	return cmd
+}
+
+func envOr(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}

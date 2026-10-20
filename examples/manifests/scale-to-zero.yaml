@@ -1,0 +1,23 @@
+# What an agent "fixing" a crash loop by turning checkout off would apply.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: prod
+  annotations:
+    kubeamber.dev/intent: "checkout pods are crash-looping; stop them while I investigate"
+  labels:
+    app: checkout
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.10

@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeamber
+  namespace: kubeamber-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [validatingwebhookconfigurations]
+    resourceNames: [kubeamber]
+    verbs: [get, update, patch]
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [validatingadmissionpolicies]
+    resourceNames: [kubeamber-protect-admission]
+    verbs: [get, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeamber
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeamber
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber
+    namespace: kubeamber-system
+---
+# The webhook keeps its serving certificate in one Secret in its own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeamber
+  namespace: kubeamber-system
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [kubeamber-webhook-tls]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeamber
+  namespace: kubeamber-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeamber
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber
+    namespace: kubeamber-system
+---
+# Bind this to the people (or groups) who may approve agent changes:
+#   kubectl create clusterrolebinding oncall-approvers \
+#     --clusterrole=kubeamber-approver --group=oncall
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-approver
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-viewer
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch]

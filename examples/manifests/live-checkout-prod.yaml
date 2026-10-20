@@ -1,0 +1,22 @@
+# The live checkout Deployment in prod, as `kubectl get -o yaml` would show it.
+# Use with: kubeamber check -f scale-to-zero.yaml --old live-checkout-prod.yaml ...
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: prod
+  labels:
+    app: checkout
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.10

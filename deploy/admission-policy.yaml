@@ -1,0 +1,37 @@
+# Kubernetes never sends changes to admission webhook configurations to
+# webhooks, so KubeAmber's webhook cannot review them. This policy, evaluated
+# by the API server itself, blocks agents from changing any of them. KubeAmber
+# keeps its kubeamber-agents condition in step with the policy's agents.
+#
+# Admission policies cannot protect themselves: an agent allowed by RBAC to
+# delete this binding could then remove the webhook. Keep
+# admissionregistration.k8s.io out of agents' RBAC. See docs/threat-model.md.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kubeamber-protect-admission
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [admissionregistration.k8s.io]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [validatingwebhookconfigurations, mutatingwebhookconfigurations]
+  matchConditions:
+    - name: kubeamber-agents
+      expression: "false"
+  validations:
+    - expression: "false"
+      message: >-
+        kubeamber: DENY: agents cannot change admission webhooks. Kubernetes does
+        not send these changes to webhooks for review, so KubeAmber blocks them
+        outright. Ask a human to make this change.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: kubeamber-protect-admission
+spec:
+  policyName: kubeamber-protect-admission
+  validationActions: [Deny]

@@ -1,0 +1,4 @@
+bin/
+.git/
+*.test
+coverage*.out

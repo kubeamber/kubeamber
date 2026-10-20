@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeamber-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+# Run in-cluster agents under service accounts in this namespace; the
+# default policy treats every one of them as an agent.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubeamber-agents

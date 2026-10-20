@@ -1,0 +1,9 @@
+# Local development overlay: runs the image built by `make docker-build`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../deploy
+images:
+  - name: ghcr.io/kubeamber/kubeamber
+    newName: kubeamber
+    newTag: dev
