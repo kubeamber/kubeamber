@@ -1,0 +1,33 @@
+KubeAmber is installed in {{ .Release.Namespace }}.
+
+1. Check that KubeAmber has started and is reviewing agents (should print the
+   agent filter, not "false"; give it a few seconds after install):
+
+   kubectl get validatingwebhookconfiguration kubeamber \
+     -o jsonpath='{.webhooks[0].matchConditions[0].expression}'
+
+2. Decide who may approve held changes:
+
+   kubectl create clusterrolebinding kubeamber-approvers \
+     --clusterrole=kubeamber-approver --group=<your on-call group>
+
+3. Give each agent its own identity instead of your kubeconfig:
+
+   kubeamber agent-kubeconfig claude-code --role edit --namespace dev
+   KUBECONFIG=./claude-code.kubeconfig <your agent>
+
+4. Review held changes:
+
+   kubeamber list
+   kubeamber approve <change request>
+{{- if .Values.bridge.enabled }}
+
+The ServiceNow bridge is enabled. It needs the Secret
+{{ .Values.bridge.credentialsSecret }} in {{ .Release.Namespace }} before it can start:
+
+   kubectl -n {{ .Release.Namespace }} create secret generic {{ .Values.bridge.credentialsSecret }} \
+     --from-literal=client-id=... --from-literal=client-secret=...
+{{- end }}
+
+Policy: edit the `policy` value and run `helm upgrade`; KubeAmber reloads it
+without restarting. Reference: https://github.com/kubeamber/kubeamber/blob/main/docs/policy.md

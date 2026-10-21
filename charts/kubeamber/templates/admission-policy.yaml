@@ -1,0 +1,39 @@
+{{- if .Values.admissionPolicy.enabled }}
+{{- $expr := "false" }}
+{{- $live := lookup "admissionregistration.k8s.io/v1" "ValidatingAdmissionPolicy" "" "kubeamber-protect-admission" }}
+{{- if $live }}{{ range $live.spec.matchConditions }}{{ if eq .name "kubeamber-agents" }}{{ $expr = .expression }}{{ end }}{{ end }}{{ end }}
+# Kubernetes never sends changes to admission webhook configurations to
+# webhooks, so this policy, evaluated by the API server, blocks agents from
+# changing any of them. See docs/threat-model.md for its limits.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: kubeamber-protect-admission
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [admissionregistration.k8s.io]
+        apiVersions: ["*"]
+        operations: [CREATE, UPDATE, DELETE]
+        resources: [validatingwebhookconfigurations, mutatingwebhookconfigurations]
+  matchConditions:
+    - name: kubeamber-agents
+      expression: {{ $expr | quote }}
+  validations:
+    - expression: "false"
+      message: >-
+        kubeamber: DENY: agents cannot change admission webhooks. Kubernetes does
+        not send these changes to webhooks for review, so KubeAmber blocks them
+        outright. Ask a human to make this change.
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: kubeamber-protect-admission
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+spec:
+  policyName: kubeamber-protect-admission
+  validationActions: [Deny]
+{{- end }}

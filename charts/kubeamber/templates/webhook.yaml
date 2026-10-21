@@ -1,0 +1,55 @@
+{{- $ca := include "kubeamber.caBundle" . }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: kubeamber
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+  {{- with .Values.webhook.tls.certManagerCertificate }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ . }}
+  {{- end }}
+webhooks:
+  - name: agents.kubeamber.dev
+    admissionReviewVersions: [v1]
+    sideEffects: NoneOnDryRun
+    failurePolicy: {{ .Values.webhook.failurePolicy }}
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
+    matchPolicy: Equivalent
+    clientConfig:
+      service: {name: kubeamber, namespace: {{ .Release.Namespace }}, path: /validate}
+      {{- with $ca }}
+      caBundle: {{ . }}
+      {{- end }}
+    # KubeAmber writes this from the policy; see docs/architecture.md.
+    matchConditions:
+      - name: kubeamber-agents
+        expression: {{ include "kubeamber.agentCondition" . | quote }}
+    rules:
+      - operations: [CREATE, UPDATE, DELETE]
+        apiGroups: ["*"]
+        apiVersions: ["*"]
+        resources: ["*", "*/scale", "pods/eviction", "serviceaccounts/token"]
+        scope: "*"
+      - operations: [CONNECT]
+        apiGroups: [""]
+        apiVersions: [v1]
+        resources: [pods/exec, pods/attach, pods/portforward]
+  - name: changerequests.kubeamber.dev
+    admissionReviewVersions: [v1]
+    sideEffects: None
+    failurePolicy: Fail
+    timeoutSeconds: {{ .Values.webhook.timeoutSeconds }}
+    clientConfig:
+      service: {name: kubeamber, namespace: {{ .Release.Namespace }}, path: /validate}
+      {{- with $ca }}
+      caBundle: {{ . }}
+      {{- end }}
+    matchConditions:
+      - name: not-kubeamber
+        expression: "request.userInfo.username != '{{ include "kubeamber.selfUser" . }}'"
+    rules:
+      - operations: [CREATE, UPDATE, DELETE]
+        apiGroups: [kubeamber.dev]
+        apiVersions: ["*"]
+        resources: [changerequests]
+        scope: Cluster
