@@ -1,0 +1,7 @@
+# Image for local kind runs: packages a binary compiled on the host
+# (make docker-build-local), so nothing is downloaded or compiled inside
+# Docker. Releases use the multi-stage Dockerfile at the repository root.
+FROM gcr.io/distroless/static:nonroot
+COPY bin/linux/kubeamber /kubeamber
+USER 65532:65532
+ENTRYPOINT ["/kubeamber"]
