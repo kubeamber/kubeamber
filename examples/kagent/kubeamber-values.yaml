@@ -1,0 +1,12 @@
+# KubeAmber policy for kagent. kagent's agents change the cluster through its
+# tool server (kagent-tools), so the tool server's service account is the
+# identity KubeAmber reviews. Everything else in the chart's default policy
+# (thresholds, protected namespaces, the RBAC rule) stays as it is.
+#
+# Don't match "kagent/*": the kagent controller lives in the same namespace
+# and would then be reviewed as an agent when it reconciles its own resources.
+policy:
+  spec:
+    agents:
+      - name: kagent
+        serviceAccounts: ["kagent/kagent-tools"]

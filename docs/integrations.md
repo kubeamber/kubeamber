@@ -54,18 +54,26 @@ any provider's agent framework can preview changes the same way.
 
 ## kagent
 
-kagent runs agents as Kubernetes resources, each with a service account.
+kagent agents change the cluster through kagent's tool server, which runs
+`kubectl` as the service account `kagent/kagent-tools`. Match that account:
 
-1. Run the agents you want gated in the `kubeamber-agents` namespace, or add their service accounts to the policy:
+```yaml
+agents:
+  - name: kagent
+    serviceAccounts: ["kagent/kagent-tools"]
+```
 
-   ```yaml
-   agents:
-     - name: kagent
-       serviceAccounts: ["kagent/*"]
-   ```
+Don't match `kagent/*`: the kagent controller runs in the same namespace and
+would then be reviewed as an agent when it manages its own resources.
 
-2. Keep kagent's own tool approval gates for tool calls; KubeAmber then judges
-   the resulting cluster changes by risk. The two layers complement each other.
+kagent-tools v0.3.0 returns only `exit status 1` to the agent when a change is
+refused, so the agent doesn't see KubeAmber's explanation. Until that changes,
+tell the agent in its instructions how to find its ChangeRequest. The
+[kagent example](../examples/kagent/README.md) has an Agent that does this, and
+a full walkthrough with screenshots.
+
+Keep kagent's own tool approval gates for tool calls; KubeAmber then judges the
+resulting cluster changes by risk. The two layers complement each other.
 
 ## HolmesGPT
 

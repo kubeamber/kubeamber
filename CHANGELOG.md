@@ -7,6 +7,18 @@ include breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Added
+
+- A kagent walkthrough ([examples/kagent](examples/kagent/README.md)) with
+  screenshots of a kagent agent's changes being allowed, held, approved and
+  denied, plus a KubeAmber-aware kagent Agent.
+
+### Fixed
+
+- The kagent integration guide matched `kagent/*`, which also reviewed the
+  kagent controller. It now matches the tool server's service account,
+  `kagent/kagent-tools`.
+
 ## [0.2.0] - 2026-10-21
 
 The first published release: signed container images, CLI binaries and the

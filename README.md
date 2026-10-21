@@ -161,6 +161,9 @@ agents:
     serviceAccounts: ["holmesgpt/holmesgpt-holmes-service-account"]
 ```
 
+See it end to end in the [kagent walkthrough](examples/kagent/README.md): a
+kagent agent's changes allowed, held for approval and denied, with screenshots.
+
 **Workstation agents** (Claude Code, Codex, kubectl-ai, Cursor): never hand an
 agent your own kubeconfig, because KubeAmber would see you, not the agent. Give
 it a short-lived identity of its own instead:
