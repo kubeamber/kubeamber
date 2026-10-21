@@ -1,6 +1,11 @@
-# KubeAmber
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="artwork/horizontal/color-dark/kubeamber-horizontal-color-dark.svg">
+    <img alt="KubeAmber" src="artwork/horizontal/color/kubeamber-horizontal-color.svg" width="420">
+  </picture>
+</h1>
 
-**Traffic lights for AI agents on Kubernetes.**
+<p align="center"><b>Traffic lights for AI agents on Kubernetes.</b></p>
 
 AI agents such as kagent, HolmesGPT, kubectl-ai and Claude Code now get write
 access to clusters. RBAC can only say yes or no to a verb on a resource: it
