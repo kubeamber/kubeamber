@@ -43,7 +43,7 @@ spec:
               app.kubernetes.io/name: kubeamber
       containers:
         - name: kubeamber
-          image: ghcr.io/kubeamber/kubeamber:v0.1.0
+          image: ghcr.io/kubeamber/kubeamber:v0.2.0
           args: [webhook, --policy=/etc/kubeamber/policy.yaml]
           env:
             - name: POD_NAMESPACE

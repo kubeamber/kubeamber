@@ -26,7 +26,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: bridge
-          image: ghcr.io/kubeamber/kubeamber:v0.1.0
+          image: ghcr.io/kubeamber/kubeamber:v0.2.0
           args: [bridge, --config=/etc/kubeamber/bridge/bridge.yaml]
           resources:
             requests: {cpu: 10m, memory: 32Mi}
