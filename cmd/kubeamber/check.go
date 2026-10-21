@@ -24,6 +24,7 @@ const (
 func checkCmd() *cobra.Command {
 	var o struct {
 		policy, file, old, as, agent, operation, namespace, subresource, output, at string
+		groups                                                                      []string
 	}
 	cmd := &cobra.Command{
 		Use:   "check -f MANIFEST --policy POLICY (--agent NAME | --as USER)",
@@ -82,7 +83,7 @@ is denied. Prometheus guards are not evaluated offline.`,
 				if err != nil {
 					return err
 				}
-				d := engine.Evaluate(cmd.Context(), decide.Request{User: o.as, Agent: o.agent, Change: c, Now: now})
+				d := engine.Evaluate(cmd.Context(), decide.Request{User: o.as, Groups: o.groups, Agent: o.agent, Change: c, Now: now})
 				if !d.IsAgent() {
 					return fmt.Errorf("%q is not an agent in policy %s", o.as, o.policy)
 				}
@@ -117,6 +118,7 @@ is denied. Prometheus guards are not evaluated offline.`,
 	f.StringVar(&o.old, "old", "", "current version of the object, to score an UPDATE")
 	f.StringVar(&o.agent, "agent", "", "evaluate as this agent profile from the policy")
 	f.StringVar(&o.as, "as", "", "evaluate as this Kubernetes username")
+	f.StringSliceVar(&o.groups, "group", nil, "with --as, a group the user belongs to (repeatable), e.g. an Entra ID group object ID")
 	f.StringVar(&o.operation, "operation", "", "CREATE, UPDATE, DELETE or CONNECT (default CREATE, or UPDATE with --old)")
 	f.StringVarP(&o.namespace, "namespace", "n", "", "namespace for objects that do not set one")
 	f.StringVar(&o.subresource, "subresource", "", "subresource, e.g. exec or scale")

@@ -5,6 +5,53 @@ the cluster with its own identity, without code changes in the agent. The
 integrations below make that identity explicit, and let agents preview
 changes and explain themselves.
 
+## Agents from any provider
+
+KubeAmber never asks which company or model is behind an agent. It recognises
+agents by the Kubernetes identity they use. Every cloud maps its own identities
+into Kubernetes, so the same policy covers agents from Azure, AWS, Google,
+Anthropic, OpenAI or your own code.
+
+**The universal method:**
+1. Run `kubectl auth whoami` with the agent's credentials.
+2. Put the username or a group it prints into `spec.agents`.
+3. Confirm the match with `kubeamber check --as <username> --group <group>`.
+
+| Where the agent runs | How it reaches the cluster | Match it in the policy with |
+|---|---|---|
+| **AKS** (Azure SRE Agent, agents on Azure AI Foundry, Copilot agents) | A managed identity or service principal, through Entra ID | `groups:` the object ID of an Entra group that holds your agents' identities (more robust than individual IDs) |
+| **EKS** (Amazon Bedrock AgentCore, Amazon Q Developer, agents on Lambda or ECS) | An IAM role, through an EKS access entry | `users: ["arn:aws:sts::<account>:assumed-role/<role>/*"]`, or give the access entry `--kubernetes-groups kubeamber:agents` and match the group |
+| **GKE** (Gemini CLI, kubectl-ai, agents on Vertex AI) | A Google service account | `users: ["<sa>@<project>.iam.gserviceaccount.com"]`, or a Google Group with Google Groups for RBAC |
+| **A workstation** (Claude Code, Codex, Cursor, Copilot in VS Code) | Its own kubeconfig: a client certificate with `O=kubeamber:agents`, or an OIDC token whose groups include it | `groups: ["kubeamber:agents"]` |
+| **Inside the cluster** (kagent, HolmesGPT, k8sgpt, your own operator) | A service account | `serviceAccounts: ["kubeamber-agents/*"]` |
+
+A single group such as `kubeamber:agents`, assigned by each cloud's identity
+mapping, keeps the policy the same across providers. Separate agent profiles
+let you treat providers differently. For example, coding agents can stay out
+of production while SRE agents may change it with approval:
+
+```yaml
+rules:
+  - name: coding-agents-stay-out-of-prod
+    match: {agents: [claude-code, gemini-cli], namespaces: ["prod*"]}
+    action: deny
+    reason: coding agents work in dev; production changes come from the SRE agents
+```
+
+The MCP server (`kubeamber mcp`) works with any MCP client, so agents built on
+any provider's agent framework can preview changes the same way.
+
+**Two limits apply whatever the provider.**
+- **An agent that acts with a human's credentials is judged as that human.**
+  This covers portal assistants that run commands as the signed-in user, and
+  a coding agent using your personal kubeconfig. Give every agent its own
+  identity; for agents you launch yourself, `kubeamber agent-kubeconfig` does
+  it in one command (see [below](#give-each-agent-its-own-identity)).
+- **Cloud control-plane calls never reach the Kubernetes API.** Examples are
+  deleting a cluster, resizing a node pool, or changing IAM. Govern those with
+  the cloud's own controls: Azure Policy, AWS service control policies,
+  Google Organization Policy.
+
 ## kagent
 
 kagent runs agents as Kubernetes resources, each with a service account.
