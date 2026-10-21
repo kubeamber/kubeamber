@@ -32,6 +32,10 @@ include breaking changes, which are called out.
 - Simulated ServiceNow (`hack/fakesnow`) and ten new end-to-end scenarios.
 - `make docker-build-local`: small image from a host-compiled binary, used by
   the kind targets.
+- `kubeamber check --group` (repeatable), to evaluate identities that are
+  agents through a group, such as an Entra ID group on AKS or `kubeamber:agents`.
+- Integration guide for agents from any provider: how AKS, EKS, GKE,
+  workstation and in-cluster agents map to policy entries.
 
 ### Security
 
