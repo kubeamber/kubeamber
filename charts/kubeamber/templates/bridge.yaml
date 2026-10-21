@@ -1,0 +1,103 @@
+{{- if .Values.bridge.enabled }}
+{{- $config := dict "apiVersion" "kubeamber.dev/v1alpha1" "kind" "BridgeConfig" "metadata" (dict "name" "servicenow") "spec" .Values.bridge.config }}
+# The webhook accepts decisions from a change-management system only from
+# this service account (webhook flag --bridge-service-account).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeamber-bridge
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-bridge
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeamber-bridge
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeamber-bridge
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber-bridge
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeamber-bridge
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+data:
+  bridge.yaml: |
+{{ toYaml $config | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeamber-bridge
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeamber.labels" . | nindent 4 }}
+    app.kubernetes.io/name: kubeamber-bridge
+spec:
+  # One replica: opening tickets is idempotent, but there is no leader election yet.
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeamber-bridge
+  template:
+    metadata:
+      labels:
+        {{- include "kubeamber.labels" . | nindent 8 }}
+        app.kubernetes.io/name: kubeamber-bridge
+      annotations:
+        # Restart when the configuration changes.
+        checksum/config: {{ toYaml $config | sha256sum }}
+    spec:
+      serviceAccountName: kubeamber-bridge
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      {{- with .Values.bridge.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.bridge.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.bridge.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bridge
+          image: {{ include "kubeamber.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [bridge, --config=/etc/kubeamber/bridge/bridge.yaml]
+          resources: {{- toYaml .Values.bridge.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/kubeamber/bridge, readOnly: true}
+            - {name: credentials, mountPath: /etc/kubeamber/servicenow, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: kubeamber-bridge}
+        - name: credentials
+          secret: {secretName: {{ .Values.bridge.credentialsSecret }}}
+{{- end }}

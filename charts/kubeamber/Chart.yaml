@@ -1,0 +1,35 @@
+apiVersion: v2
+name: kubeamber
+description: >-
+  Traffic lights for AI agents on Kubernetes. Reviews every change an AI agent
+  makes: routine changes go through, risky ones wait for a human, dangerous
+  ones are denied.
+type: application
+version: 0.2.0
+appVersion: "v0.2.0"
+kubeVersion: ">=1.30.0-0"
+home: https://github.com/kubeamber/kubeamber
+sources:
+  - https://github.com/kubeamber/kubeamber
+icon: https://raw.githubusercontent.com/kubeamber/kubeamber/main/artwork/icon/color/kubeamber-icon-color.svg
+keywords: [kubernetes, ai-agents, admission-webhook, policy, human-in-the-loop, mcp, change-management]
+maintainers:
+  - name: Sathpal Singh
+    url: https://github.com/sathpal
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/kubeamber/kubeamber/tree/main/docs
+    - name: Policy reference
+      url: https://github.com/kubeamber/kubeamber/blob/main/docs/policy.md
+  artifacthub.io/images: |
+    - name: kubeamber
+      image: ghcr.io/kubeamber/kubeamber:v0.2.0
+  artifacthub.io/crds: |
+    - kind: ChangeRequest
+      version: v1alpha1
+      name: changerequests.kubeamber.dev
+      displayName: ChangeRequest
+      description: A change an AI agent tried to make that KubeAmber held for human approval.

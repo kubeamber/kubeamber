@@ -30,7 +30,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 		namespace, serviceAccount, service        string
 		bridgeServiceAccount                      string
 		webhookConfig, admissionPolicy, tlsSecret string
-		reload                                    time.Duration
+		reload, resync                            time.Duration
 	}
 	cmd := &cobra.Command{
 		Use:   "webhook",
@@ -106,6 +106,22 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			}
 			sync(p)
 			go current.Watch(ctx, o.policy, o.reload, log, sync)
+			// Re-apply the configuration periodically too: `helm upgrade` or
+			// `kubectl apply -k` resets the CA bundle and the agent match
+			// condition to their placeholders, which would leave agents
+			// unreviewed until the next restart.
+			go func() {
+				t := time.NewTicker(o.resync)
+				defer t.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-t.C:
+						sync(current.Get())
+					}
+				}
+			}()
 
 			engine := &decide.Engine{
 				Policy: current.Get,
@@ -148,6 +164,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 	f.StringVar(&o.admissionPolicy, "admission-policy", "kubeamber-protect-admission", "ValidatingAdmissionPolicy that blocks agents from changing admission webhooks (empty to skip)")
 	f.StringVar(&o.tlsSecret, "tls-secret", "kubeamber-webhook-tls", "Secret holding the self-managed certificate")
 	f.DurationVar(&o.reload, "reload-interval", 5*time.Second, "how often to check the policy file for changes")
+	f.DurationVar(&o.resync, "resync-interval", 30*time.Second, "how often to re-apply the webhook configuration (CA bundle and agent match condition)")
 	return cmd
 }
 

@@ -1,0 +1,113 @@
+# KubeAmber is one per cluster: its webhook configuration, admission policy
+# and CRD are cluster-wide. Install it once, ideally in kubeamber-system.
+
+image:
+  repository: ghcr.io/kubeamber/kubeamber
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+webhook:
+  replicas: 2
+  # Fail closed: if KubeAmber is down, agents wait. Humans and controllers
+  # never reach the webhook, so they are unaffected.
+  failurePolicy: Fail
+  timeoutSeconds: 5
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {memory: 128Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  priorityClassName: ""
+  podAnnotations: {}
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  # Extra environment variables, for example to export telemetry:
+  # - name: OTEL_EXPORTER_OTLP_ENDPOINT
+  #   value: http://otel-collector.observability:4318
+  env: []
+  tls:
+    # By default KubeAmber creates its own serving certificate and keeps it in
+    # a Secret. To use cert-manager or another issuer instead, name the
+    # kubernetes.io/tls Secret here...
+    existingSecret: ""
+    # ...and either let cert-manager inject the CA (namespace/certificate)...
+    certManagerCertificate: ""
+    # ...or give the CA bundle (PEM) yourself.
+    caBundle: ""
+
+# Block agents from changing admission webhooks, which Kubernetes never sends
+# to webhooks for review (docs/architecture.md). Strongly recommended.
+admissionPolicy:
+  enabled: true
+
+# Create the namespace for agents' service accounts (kubeamber agent-kubeconfig
+# puts them here). Kept on uninstall.
+agentsNamespace:
+  create: true
+  name: kubeamber-agents
+
+# Install the ChangeRequest CRD. It is kept on uninstall, with any held changes.
+crds:
+  install: true
+
+# The policy KubeAmber enforces. Reference: docs/policy.md. KubeAmber reloads
+# it within seconds of a `helm upgrade`, without restarting.
+policy:
+  apiVersion: kubeamber.dev/v1alpha1
+  kind: Policy
+  metadata:
+    name: default
+  spec:
+    agents:
+      # Every service account in the agents namespace.
+      - name: sre-agent
+        serviceAccounts: ["kubeamber-agents/*"]
+      # Workstation agents whose kubeconfig carries this group.
+      - name: workstation-agents
+        groups: ["kubeamber:agents"]
+    thresholds:
+      hold: 30
+      deny: 80
+    protectedNamespaces: ["kube-system", "kube-public", "prod", "prod-*"]
+    rules:
+      - name: no-rbac-changes
+        match:
+          kinds: [Role, RoleBinding, ClusterRole, ClusterRoleBinding]
+        action: deny
+        reason: agents may not change RBAC, because that would let them grant themselves more power
+    approvals:
+      ttl: 15m
+      pendingTTL: 1h
+
+# The ServiceNow change-management bridge (docs/integrations.md).
+bridge:
+  enabled: false
+  # Secret in the release namespace with client-id and client-secret (oauth),
+  # or username and password (basic). Create it before enabling the bridge.
+  credentialsSecret: kubeamber-servicenow
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  config:
+    interval: 15s
+    # Keep in step with policy.spec.approvals.ttl.
+    approvalTTL: 15m
+    servicenow:
+      instanceURL: https://YOUR-INSTANCE.service-now.com
+      auth:
+        type: oauth
+        clientIDFile: /etc/kubeamber/servicenow/client-id
+        clientSecretFile: /etc/kubeamber/servicenow/client-secret
+      changeType: normal
+      window: 24h
+      closeState: review
+      fields:
+        category: Software
+      configurationItems: {}

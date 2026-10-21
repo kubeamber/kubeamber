@@ -1,0 +1,104 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: changerequests.kubeamber.dev
+  annotations:
+    # Helm keeps the CRD, and every held change, when the chart is uninstalled.
+    helm.sh/resource-policy: keep
+spec:
+  group: kubeamber.dev
+  scope: Cluster
+  names:
+    kind: ChangeRequest
+    listKind: ChangeRequestList
+    plural: changerequests
+    singular: changerequest
+    shortNames: [cr, tcr]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - {name: Phase, type: string, jsonPath: .status.phase}
+        - {name: Agent, type: string, jsonPath: .spec.agent}
+        - {name: Operation, type: string, jsonPath: .spec.operation}
+        - {name: Kind, type: string, jsonPath: .spec.target.kind}
+        - {name: Namespace, type: string, jsonPath: .spec.target.namespace}
+        - {name: Name, type: string, jsonPath: .spec.target.name}
+        - {name: Risk, type: integer, jsonPath: .spec.score}
+        - {name: Ticket, type: string, jsonPath: .status.external.number}
+        - {name: Decided-By, type: string, jsonPath: .spec.approval.by, priority: 1}
+        - {name: Age, type: date, jsonPath: .metadata.creationTimestamp}
+      schema:
+        openAPIV3Schema:
+          description: >-
+            A change an AI agent tried to make that KubeAmber held for human
+            approval. Created by KubeAmber; humans may only record a decision in
+            spec.approval (approve with `kubeamber approve NAME`).
+          type: object
+          required: [spec]
+          properties:
+            apiVersion: {type: string}
+            kind: {type: string}
+            metadata: {type: object}
+            spec:
+              type: object
+              required: [agent, user, operation, target, score, fingerprint, expiresAt]
+              properties:
+                agent: {type: string, description: Agent profile from the policy.}
+                user: {type: string, description: Kubernetes username that made the request.}
+                owner: {type: string, description: "Person who launched the agent (kubeamber.dev/owner on its service account)."}
+                operation: {type: string, enum: [CREATE, UPDATE, DELETE, CONNECT]}
+                target:
+                  type: object
+                  required: [resource, kind]
+                  properties:
+                    group: {type: string}
+                    version: {type: string}
+                    resource: {type: string}
+                    subResource: {type: string}
+                    kind: {type: string}
+                    namespace: {type: string}
+                    name: {type: string}
+                score: {type: integer, minimum: 0, maximum: 100}
+                reasons:
+                  type: array
+                  items: {type: string}
+                factors:
+                  type: array
+                  items: {type: string}
+                summary: {type: string}
+                intent: {type: string, description: Why the agent says it made the change.}
+                traceparent: {type: string, description: W3C traceparent of the agent's trace.}
+                fingerprint: {type: string, description: "SHA-256 of identity, operation, target and content."}
+                expiresAt: {type: string, format: date-time}
+                approval:
+                  type: object
+                  required: [decision, by, at]
+                  properties:
+                    decision: {type: string, enum: [Approved, Rejected]}
+                    by: {type: string}
+                    reason: {type: string}
+                    at: {type: string, format: date-time}
+                    source: {type: string, description: "Empty for in-cluster decisions; the change-management system otherwise."}
+                    externalRef: {type: string, description: "Ticket number in that system, e.g. CHG0031234."}
+            status:
+              type: object
+              properties:
+                phase: {type: string, enum: [Pending, Approved, Rejected, Consumed, Expired]}
+                consumedAt: {type: string, format: date-time}
+                external:
+                  description: Ticket in a change-management system, linked by `kubeamber bridge`.
+                  type: object
+                  required: [system, id, number]
+                  properties:
+                    system: {type: string}
+                    id: {type: string}
+                    number: {type: string}
+                    url: {type: string}
+                    state: {type: string}
+                    plannedStart: {type: string, format: date-time}
+                    plannedEnd: {type: string, format: date-time}
+                    syncedAt: {type: string, format: date-time}
+                    error: {type: string}
+                    closed: {type: boolean}

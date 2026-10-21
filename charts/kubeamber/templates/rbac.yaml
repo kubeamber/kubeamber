@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeamber
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [validatingwebhookconfigurations]
+    resourceNames: [kubeamber]
+    verbs: [get, update, patch]
+  # Read agents' service accounts to record who launched them (kubeamber.dev/owner).
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [get]
+  {{- if .Values.admissionPolicy.enabled }}
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [validatingadmissionpolicies]
+    resourceNames: [kubeamber-protect-admission]
+    verbs: [get, update, patch]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeamber
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeamber
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber
+    namespace: {{ .Release.Namespace }}
+{{- if not .Values.webhook.tls.existingSecret }}
+---
+# The self-managed serving certificate lives in one Secret.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeamber
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [kubeamber-webhook-tls]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeamber
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeamber
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber
+    namespace: {{ .Release.Namespace }}
+{{- end }}
+---
+# Bind to the people who may approve agent changes, e.g.:
+#   kubectl create clusterrolebinding oncall-approvers --clusterrole=kubeamber-approver --group=oncall
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-approver
+  labels:
+    {{- include "kubeamber.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-viewer
+  labels:
+    {{- include "kubeamber.labels" . | nindent 4 }}
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch]

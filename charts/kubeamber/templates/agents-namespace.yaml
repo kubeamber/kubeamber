@@ -1,0 +1,10 @@
+{{- if .Values.agentsNamespace.create }}
+# Agents' service accounts live here; kept on uninstall.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.agentsNamespace.name }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+{{- end }}

@@ -176,6 +176,11 @@ makes `failurePolicy: Fail` safe: if KubeAmber is unavailable, only agents
 are blocked (fail-closed), and the rest of the cluster carries on. Other
 match conditions you add to the webhook are preserved.
 
+KubeAmber also re-applies the condition and its CA bundle every 30 seconds
+(`--resync-interval`), because `helm upgrade` or `kubectl apply -k` resets
+them to the manifest's placeholders. The Helm chart also reads the live values
+back during an upgrade, so there is no gap at all.
+
 The shipped manifest's condition is `"false"`, so until KubeAmber's first
 successful sync the webhook receives nothing and **agents are not gated**.
 Check that the sync happened after installing:
