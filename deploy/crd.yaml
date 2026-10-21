@@ -23,6 +23,7 @@ spec:
         - {name: Namespace, type: string, jsonPath: .spec.target.namespace}
         - {name: Name, type: string, jsonPath: .spec.target.name}
         - {name: Risk, type: integer, jsonPath: .spec.score}
+        - {name: Ticket, type: string, jsonPath: .status.external.number}
         - {name: Decided-By, type: string, jsonPath: .spec.approval.by, priority: 1}
         - {name: Age, type: date, jsonPath: .metadata.creationTimestamp}
       schema:
@@ -59,6 +60,9 @@ spec:
                 reasons:
                   type: array
                   items: {type: string}
+                factors:
+                  type: array
+                  items: {type: string}
                 summary: {type: string}
                 intent: {type: string, description: Why the agent says it made the change.}
                 traceparent: {type: string, description: W3C traceparent of the agent's trace.}
@@ -72,8 +76,25 @@ spec:
                     by: {type: string}
                     reason: {type: string}
                     at: {type: string, format: date-time}
+                    source: {type: string, description: "Empty for in-cluster decisions; the change-management system otherwise."}
+                    externalRef: {type: string, description: "Ticket number in that system, e.g. CHG0031234."}
             status:
               type: object
               properties:
                 phase: {type: string, enum: [Pending, Approved, Rejected, Consumed, Expired]}
                 consumedAt: {type: string, format: date-time}
+                external:
+                  description: Ticket in a change-management system, linked by `kubeamber bridge`.
+                  type: object
+                  required: [system, id, number]
+                  properties:
+                    system: {type: string}
+                    id: {type: string}
+                    number: {type: string}
+                    url: {type: string}
+                    state: {type: string}
+                    plannedStart: {type: string, format: date-time}
+                    plannedEnd: {type: string, format: date-time}
+                    syncedAt: {type: string, format: date-time}
+                    error: {type: string}
+                    closed: {type: boolean}

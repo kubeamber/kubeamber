@@ -57,12 +57,15 @@ type ChangeRequest struct {
 }
 
 type Spec struct {
-	Agent       string      `json:"agent"`
-	User        string      `json:"user"`
-	Operation   string      `json:"operation"`
-	Target      Target      `json:"target"`
-	Score       int         `json:"score"`
-	Reasons     []string    `json:"reasons,omitempty"`
+	Agent     string   `json:"agent"`
+	User      string   `json:"user"`
+	Operation string   `json:"operation"`
+	Target    Target   `json:"target"`
+	Score     int      `json:"score"`
+	Reasons   []string `json:"reasons,omitempty"`
+	// Factors are the risk score's contributions, e.g. "+35 scales checkout
+	// from 3 to 0 replicas (takes it offline)".
+	Factors     []string    `json:"factors,omitempty"`
 	Summary     string      `json:"summary,omitempty"`
 	Intent      string      `json:"intent,omitempty"`
 	TraceParent string      `json:"traceparent,omitempty"`
@@ -86,24 +89,76 @@ type Approval struct {
 	By       string      `json:"by"`
 	Reason   string      `json:"reason,omitempty"`
 	At       metav1.Time `json:"at"`
+	// Source is empty for decisions recorded in the cluster (kubeamber
+	// approve) and names the change-management system otherwise.
+	Source string `json:"source,omitempty"`
+	// ExternalRef is the ticket number in that system, e.g. CHG0031234.
+	ExternalRef string `json:"externalRef,omitempty"`
 }
 
 type Status struct {
 	Phase      Phase        `json:"phase"`
 	ConsumedAt *metav1.Time `json:"consumedAt,omitempty"`
+	External   *External    `json:"external,omitempty"`
+}
+
+// External links a change request to a ticket in a change-management system.
+// The bridge sets it once; System, ID, Number and URL never change after that.
+type External struct {
+	System       string       `json:"system"`
+	ID           string       `json:"id"`
+	Number       string       `json:"number"`
+	URL          string       `json:"url,omitempty"`
+	State        string       `json:"state,omitempty"`
+	PlannedStart *metav1.Time `json:"plannedStart,omitempty"`
+	PlannedEnd   *metav1.Time `json:"plannedEnd,omitempty"`
+	SyncedAt     *metav1.Time `json:"syncedAt,omitempty"`
+	// Error is the last error the bridge hit for this ticket, if any.
+	Error string `json:"error,omitempty"`
+	// Closed is set once the ticket has been closed or cancelled.
+	Closed bool `json:"closed,omitempty"`
+}
+
+// SameTicket reports whether e and o identify the same ticket.
+func (e *External) SameTicket(o *External) bool {
+	if e == nil || o == nil {
+		return e == o
+	}
+	return e.System == o.System && e.ID == o.ID && e.Number == o.Number && e.URL == o.URL
+}
+
+// Deadline is when a pending request expires. A request linked to a ticket
+// with a planned window waits until the window closes, because change
+// advisory boards take longer than the in-cluster pending TTL.
+func (cr *ChangeRequest) Deadline() time.Time {
+	if e := cr.Status.External; e != nil && e.PlannedEnd != nil {
+		return e.PlannedEnd.Time
+	}
+	return cr.Spec.ExpiresAt.Time
 }
 
 // Effective returns the phase taking time into account: a pending request
-// past its expiry, or an approval older than approvalTTL, is Expired.
+// past its deadline is Expired, and so is an approval older than approvalTTL
+// or, for a ticket with a planned window, one whose window has closed.
 func (cr *ChangeRequest) Effective(now time.Time, approvalTTL time.Duration) Phase {
 	switch cr.Status.Phase {
 	case Pending, "":
-		if now.After(cr.Spec.ExpiresAt.Time) {
+		if now.After(cr.Deadline()) {
 			return Expired
 		}
 		return Pending
 	case Approved:
-		if cr.Spec.Approval == nil || now.After(cr.Spec.Approval.At.Add(approvalTTL)) {
+		a := cr.Spec.Approval
+		if a == nil {
+			return Expired
+		}
+		if e := cr.Status.External; a.Source != "" && e != nil && e.PlannedEnd != nil {
+			if now.After(e.PlannedEnd.Time) {
+				return Expired
+			}
+			return Approved
+		}
+		if now.After(a.At.Add(approvalTTL)) {
 			return Expired
 		}
 		return Approved
@@ -240,6 +295,21 @@ func (s *Store) SetPhase(ctx context.Context, cr *ChangeRequest, phase Phase, no
 	if apierrors.IsConflict(err) {
 		return ErrAlreadyUsed
 	}
+	if err != nil {
+		return err
+	}
+	cr.ResourceVersion = updated.GetResourceVersion()
+	return nil
+}
+
+// Update writes the whole change request at the resource version it was read
+// at. A concurrent change makes it fail with a conflict.
+func (s *Store) Update(ctx context.Context, cr *ChangeRequest) error {
+	u, err := cr.toUnstructured()
+	if err != nil {
+		return err
+	}
+	updated, err := s.res().Update(ctx, u, metav1.UpdateOptions{})
 	if err != nil {
 		return err
 	}

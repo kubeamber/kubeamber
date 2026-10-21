@@ -11,6 +11,8 @@ import (
 type Flags struct {
 	Kubeconfig string
 	Context    string
+	// As impersonates a user, e.g. a service account, like kubectl --as.
+	As string
 }
 
 // Config returns a REST config. Without an explicit kubeconfig it follows
@@ -26,5 +28,8 @@ func (f Flags) Config() (*rest.Config, error) {
 		return nil, err
 	}
 	cfg.UserAgent = "kubeamber"
+	if f.As != "" {
+		cfg.Impersonate.UserName = f.As
+	}
 	return cfg, nil
 }

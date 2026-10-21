@@ -1,0 +1,29 @@
+# The webhook accepts decisions from a change-management system only from
+# this service account (webhook flag --bridge-service-account).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeamber-bridge
+  namespace: kubeamber-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-bridge
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeamber-bridge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeamber-bridge
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber-bridge
+    namespace: kubeamber-system

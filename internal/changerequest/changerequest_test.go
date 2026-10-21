@@ -108,6 +108,12 @@ func TestEffective(t *testing.T) {
 	approved := &ChangeRequest{Spec: Spec{ExpiresAt: metav1.NewTime(now.Add(time.Hour)),
 		Approval: &Approval{Decision: DecisionApproved, At: metav1.NewTime(now)}}, Status: Status{Phase: Approved}}
 	pending := &ChangeRequest{Spec: Spec{ExpiresAt: metav1.NewTime(now.Add(time.Hour))}, Status: Status{Phase: Pending}}
+	end := metav1.NewTime(now.Add(24 * time.Hour))
+	ticket := &External{System: "servicenow", ID: "sys-1", Number: "CHG0030001", PlannedEnd: &end}
+	linkedPending := &ChangeRequest{Spec: pending.Spec, Status: Status{Phase: Pending, External: ticket}}
+	externallyApproved := &ChangeRequest{Spec: Spec{ExpiresAt: pending.Spec.ExpiresAt,
+		Approval: &Approval{Decision: DecisionApproved, At: metav1.NewTime(now), Source: "servicenow", ExternalRef: "CHG0030001"}},
+		Status: Status{Phase: Approved, External: ticket}}
 	cases := []struct {
 		cr   *ChangeRequest
 		at   time.Time
@@ -118,6 +124,12 @@ func TestEffective(t *testing.T) {
 		{approved, now.Add(10 * time.Minute), Approved},
 		{approved, now.Add(20 * time.Minute), Expired},
 		{&ChangeRequest{Status: Status{Phase: Consumed}}, now, Consumed},
+		// Linked to a ticket: pending waits for the window, not ExpiresAt.
+		{linkedPending, now.Add(5 * time.Hour), Pending},
+		{linkedPending, now.Add(25 * time.Hour), Expired},
+		// Approved in the ticket: valid until the window closes, past the TTL.
+		{externallyApproved, now.Add(5 * time.Hour), Approved},
+		{externallyApproved, now.Add(25 * time.Hour), Expired},
 	}
 	for i, c := range cases {
 		if got := c.cr.Effective(c.at, ttl); got != c.want {

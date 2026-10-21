@@ -3,7 +3,7 @@ IMAGE   ?= kubeamber:dev
 CLUSTER ?= kubeamber
 LDFLAGS := -X github.com/kubeamber/kubeamber/internal/version.Version=$(VERSION)
 
-.PHONY: build test lint fmt docker-build kind-up kind-load kind-deploy kind-demo e2e kind-down clean
+.PHONY: build test lint fmt docker-build docker-build-local kind-up kind-load kind-deploy kind-demo e2e kind-down clean
 
 build: ## Build bin/kubeamber
 	go build -ldflags "$(LDFLAGS)" -o bin/kubeamber ./cmd/kubeamber
@@ -22,10 +22,14 @@ fmt:
 docker-build: ## Build the container image
 	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .
 
+docker-build-local: ## Build the image from a host-compiled binary (small and fast; used by the kind targets)
+	CGO_ENABLED=0 GOOS=linux GOARCH=$$(go env GOARCH) go build -trimpath -ldflags "-s -w $(LDFLAGS)" -o bin/linux/kubeamber ./cmd/kubeamber
+	docker build -f hack/Dockerfile.local -t $(IMAGE) .
+
 kind-up: ## Create a kind cluster
 	kind get clusters | grep -qx $(CLUSTER) || kind create cluster --name $(CLUSTER) --wait 90s
 
-kind-load: docker-build
+kind-load: docker-build-local
 	kind load docker-image $(IMAGE) --name $(CLUSTER)
 
 kind-deploy: build kind-up kind-load ## Install KubeAmber into the kind cluster

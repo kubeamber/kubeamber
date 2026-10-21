@@ -116,6 +116,67 @@ held, and 3 if anything would be denied. Treat 2 as "needs a human review" and
 3 as "block". Pass `--old` with the live object to score updates accurately,
 and `-o json` for machine-readable output.
 
+## ServiceNow change management
+
+`kubeamber bridge` connects held changes to ServiceNow Change Management, so
+agent changes go through the same approval process (CAB, approval levels,
+change windows) as everyone else's, and every ticket ends with evidence of what
+was applied. The design is in
+[proposal 0001](proposals/0001-change-management.md).
+
+1. The agent's change is held. The bridge opens a normal (or emergency) change
+   with the agent, its intent, the risk score and every factor, the CMDB item
+   for the namespace, and a planned window. `correlation_id` is the
+   ChangeRequest name, so a restarted bridge never opens a duplicate.
+2. Approvers decide in ServiceNow. The agent's retries are told the ticket
+   number and link.
+3. When the ticket is approved and Scheduled, the bridge records the approver
+   (`servicenow:<user_name>`). The agent's identical retry is then applied
+   once, within the window.
+4. The bridge writes the implementation note and moves the ticket to Review
+   (`close_code=successful`), or cancels it if the change never happened.
+
+Install it after KubeAmber, with credentials in a Secret:
+
+```sh
+kubectl -n kubeamber-system create secret generic kubeamber-servicenow \
+  --from-literal=client-id=... --from-literal=client-secret=...
+# edit deploy/servicenow-bridge/bridge.yaml: instanceURL, fields, configurationItems
+kubectl apply -k deploy/servicenow-bridge
+```
+
+Then, if ServiceNow must be the only place approvals happen, set
+`approvals.requireExternal: true` in the policy.
+
+**ServiceNow side.** Use an OAuth client (client-credentials grant) or a
+dedicated integration user. Give it the least privilege that can create and
+update change requests and read approvals (for example `itil` plus
+`sn_change_read`), not `admin`. The bridge calls
+`/api/sn_chg_rest/change/{normal,emergency}`, `/api/now/table/change_request`,
+`/api/now/table/sysapproval_approver` and `/oauth_token.do`, outbound from the
+cluster; ServiceNow never needs to reach the cluster.
+
+**What leaves the cluster.** The ticket gets the agent, the operation, the
+target, the summary, the score and factors, the intent, the fingerprint and
+the trace link. Object contents are never sent, so Secret values and
+environment variables stay in the cluster.
+
+**Who can approve.** Only the bridge's service account (`kubeamber-bridge`)
+can record a decision from ServiceNow, and only for the ticket it linked. The
+link is immutable. The webhook enforces this, so a compromised bridge
+configuration cannot approve changes without a matching ticket.
+
+**Try it without ServiceNow.** `make kind-demo` runs a simulated instance
+(`go run ./hack/fakesnow`) and walks a change through ticket, CAB approval,
+apply and close. To approve by hand:
+
+```sh
+curl -X POST 'http://127.0.0.1:18080/fake/changes/CHG0030001/approve?by=jane.cab'
+```
+
+For a real instance, a free Personal Developer Instance from
+developer.servicenow.com works.
+
 ## OpenTelemetry and Grafana
 
 Set the standard variables on the webhook Deployment:

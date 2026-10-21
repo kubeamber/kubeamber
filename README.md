@@ -52,6 +52,10 @@ Every verdict carries a reason the agent can read and act on.
   change requests, whatever the policy says. A ValidatingAdmissionPolicy stops
   them changing admission webhooks, which Kubernetes never sends to webhooks.
   See the [threat model](docs/threat-model.md) for the limits.
+- **Fits your change process.** `kubeamber bridge` turns held changes into
+  ServiceNow change requests. Your CAB approves there; the agent applies
+  exactly that change in the approved window, and the ticket is closed with
+  evidence. See [integrations](docs/integrations.md#servicenow-change-management).
 - **Traceable.** Decisions are OpenTelemetry spans linked to the agent's own
   trace. They also appear in the Kubernetes audit log.
 
@@ -108,10 +112,10 @@ make kind-demo
 ```
 
 This creates a kind cluster, builds and loads the image, deploys KubeAmber, and
-plays an agent with `cluster-admin` through 27 scenarios
+plays an agent with `cluster-admin` through 37 scenarios
 ([hack/e2e.sh](hack/e2e.sh)): allow, hold, approve, retry, reject, deny, and
-attempts to switch KubeAmber off. RBAC allows every one of them; KubeAmber
-decides.
+attempts to switch KubeAmber off, and a change approved through a simulated
+ServiceNow. RBAC allows every one of them; KubeAmber decides.
 
 To install on an existing cluster (Kubernetes 1.30+, for `matchConditions`):
 

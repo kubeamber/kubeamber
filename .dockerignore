@@ -1,4 +1,5 @@
-bin/
+bin/*
+!bin/linux
 .git/
 *.test
 coverage*.out

@@ -104,7 +104,12 @@ list; the full value in `spec.fingerprint` is compared exactly.
   duplicate request is raised.
 - **Rejected:** retries are denied with the human's reason until
   `pendingTTL` after the decision; after that a retry raises a new request.
-- **Expired / Consumed:** ignored; a retry raises a new request.
+- **Expired:** ignored; a retry raises a new request.
+- **Consumed:** for 30 seconds the identical change is still allowed, because
+  the API server re-runs admission when it retries a write after a conflict
+  (for example while a controller updates the object's status). One kubectl
+  command can reach the webhook twice, and re-applying an identical change has
+  no further effect. After 30 seconds a retry raises a new request.
 - **One approval, one use.** Consumption is an update at the resource version
   KubeAmber read. If two retries race, one update succeeds. The other gets a
   conflict, moves on and is held again.
@@ -112,6 +117,17 @@ list; the full value in `spec.fingerprint` is compared exactly.
 `Expired` is computed from timestamps (`spec.expiresAt`, `spec.approval.at` +
 `approvals.ttl`) rather than written by a controller; `kubeamber list` shows the
 effective phase.
+
+### Change-management tickets
+
+With `kubeamber bridge` installed, a Pending ChangeRequest is linked to a
+ticket in a change-management system (`status.external`), and the decision can
+come from there. The webhook still decides everything locally; the bridge
+syncs in the background, so ServiceNow latency never reaches the admission
+path. A linked request waits until the ticket's planned window closes, and an
+approval from the ticket is usable only inside that window. See
+[proposal 0001](proposals/0001-change-management.md) for the full protocol and
+the rules the webhook enforces on the bridge.
 
 ### Two-person rule
 

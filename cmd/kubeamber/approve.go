@@ -51,7 +51,7 @@ func listCmd(kf *kube.Flags) *cobra.Command {
 			}
 			now := time.Now()
 			tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-			fmt.Fprintln(tw, "NAME\tPHASE\tAGENT\tCHANGE\tRISK\tAGE\tSUMMARY")
+			fmt.Fprintln(tw, "NAME\tPHASE\tAGENT\tCHANGE\tRISK\tTICKET\tAGE\tSUMMARY")
 			shown := 0
 			for _, cr := range crs {
 				phase := cr.Effective(now, approvalTTL)
@@ -68,8 +68,12 @@ func listCmd(kf *kube.Flags) *cobra.Command {
 				if cr.Spec.Intent != "" {
 					summary = strings.TrimSpace(summary + ` intent: "` + cr.Spec.Intent + `"`)
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s %s\t%d\t%s\t%s\n", cr.Name, phase, cr.Spec.Agent, cr.Spec.Operation, target,
-					cr.Spec.Score, duration.HumanDuration(now.Sub(cr.CreationTimestamp.Time)), summary)
+				ticket := "-"
+				if e := cr.Status.External; e != nil {
+					ticket = e.Number
+				}
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s %s\t%d\t%s\t%s\t%s\n", cr.Name, phase, cr.Spec.Agent, cr.Spec.Operation, target,
+					cr.Spec.Score, ticket, duration.HumanDuration(now.Sub(cr.CreationTimestamp.Time)), summary)
 			}
 			if err := tw.Flush(); err != nil {
 				return err

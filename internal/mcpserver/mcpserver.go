@@ -236,6 +236,9 @@ type ChangeRequestOutput struct {
 	Phase     string `json:"phase"`
 	Target    string `json:"target"`
 	DecidedBy string `json:"decidedBy,omitempty"`
+	// Ticket and TicketURL identify the change-management ticket, if any.
+	Ticket    string `json:"ticket,omitempty"`
+	TicketURL string `json:"ticketURL,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 	Next      string `json:"next"`
 }
@@ -256,9 +259,15 @@ func (s *Server) changeRequest(ctx context.Context, _ *mcp.CallToolRequest, in C
 	if a := cr.Spec.Approval; a != nil {
 		out.DecidedBy, out.Reason = a.By, a.Reason
 	}
+	if e := cr.Status.External; e != nil {
+		out.Ticket, out.TicketURL = e.Number, e.URL
+	}
 	switch phase {
 	case changerequest.Pending:
 		out.Next = "Still waiting for a human. Do not retry yet."
+		if out.Ticket != "" {
+			out.Next = "Waiting for approval of " + out.Ticket + " in the change-management system. Tell the user the ticket number; do not retry yet."
+		}
 	case changerequest.Approved:
 		out.Next = "Approved. Retry the identical change now; the approval can be used once."
 	case changerequest.Rejected:

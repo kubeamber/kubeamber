@@ -38,6 +38,7 @@ spec:
 const (
 	agentUser = "system:serviceaccount:agents:bot"
 	selfUser  = "system:serviceaccount:kubeamber-system:kubeamber"
+	bridge    = "system:serviceaccount:kubeamber-system:kubeamber-bridge"
 )
 
 // memStore is an in-memory change request store.
@@ -73,6 +74,10 @@ func (m *memStore) SetPhase(_ context.Context, cr *changerequest.ChangeRequest, 
 		return changerequest.ErrAlreadyUsed
 	}
 	stored.Status.Phase = phase
+	if phase == changerequest.Consumed {
+		t := metav1.NewTime(now)
+		stored.Status.ConsumedAt = &t
+	}
 	return nil
 }
 
@@ -97,12 +102,13 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{store: &memStore{crs: map[string]*changerequest.ChangeRequest{}}, now: time.Date(2026, 10, 21, 10, 0, 0, 0, time.UTC)}
 	get := func() *policy.Policy { return p }
 	f.h = NewHandler(Handler{
-		Engine:   &decide.Engine{Policy: get, Self: decide.Self{Namespace: "kubeamber-system", WebhookName: "kubeamber"}},
-		Store:    f.store,
-		Policy:   get,
-		SelfUser: selfUser,
-		Now:      func() time.Time { return f.now },
-		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Engine:     &decide.Engine{Policy: get, Self: decide.Self{Namespace: "kubeamber-system", WebhookName: "kubeamber"}},
+		Store:      f.store,
+		Policy:     get,
+		SelfUser:   selfUser,
+		BridgeUser: bridge,
+		Now:        func() time.Time { return f.now },
+		Log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	return f
 }
@@ -190,7 +196,15 @@ func TestHoldApproveRetry(t *testing.T) {
 		t.Errorf("phase %s, annotations %v", f.store.crs["cr-1"].Status.Phase, resp.AuditAnnotations)
 	}
 
-	// 4. The approval cannot be reused.
+	// 4. The API server retrying the same write after a conflict is let
+	// through: the identical change was just approved and applied.
+	resp = f.h.Review(ctx, scaleToZero(agentUser))
+	if !resp.Allowed || !strings.Contains(resp.Warnings[0], "retried the write") || len(f.store.crs) != 1 {
+		t.Fatalf("API-server retry: allowed=%v crs=%d %v", resp.Allowed, len(f.store.crs), resp.Warnings)
+	}
+
+	// 5. After that, the approval cannot be reused.
+	f.now = f.now.Add(replayWindow + time.Second)
 	resp = f.h.Review(ctx, scaleToZero(agentUser))
 	if resp.Allowed || len(f.store.crs) != 2 {
 		t.Fatalf("approval was reused: allowed=%v crs=%d", resp.Allowed, len(f.store.crs))
@@ -294,7 +308,12 @@ func decided(cr map[string]any, decision, by string, at time.Time, phase string)
 	var out map[string]any
 	_ = json.Unmarshal(data, &out)
 	out["spec"].(map[string]any)["approval"] = map[string]any{"decision": decision, "by": by, "reason": "r", "at": at.Format(time.RFC3339)}
-	out["status"] = map[string]any{"phase": phase}
+	st, _ := out["status"].(map[string]any)
+	if st == nil {
+		st = map[string]any{}
+	}
+	st["phase"] = phase
+	out["status"] = st
 	return out
 }
 
@@ -413,5 +432,143 @@ func TestLinkTo(t *testing.T) {
 	}
 	if _, ok := linkTo("garbage"); ok {
 		t.Error("invalid traceparent was linked")
+	}
+}
+
+// --- change-management bridge ---
+
+func deepCopy(m map[string]any) map[string]any {
+	data, _ := json.Marshal(m)
+	var out map[string]any
+	_ = json.Unmarshal(data, &out)
+	return out
+}
+
+func withTicket(cr map[string]any, number string) map[string]any {
+	out := deepCopy(cr)
+	st := out["status"].(map[string]any)
+	st["external"] = map[string]any{"system": "servicenow", "id": "sys-" + number, "number": number, "state": "New"}
+	return out
+}
+
+func externallyDecided(cr map[string]any, decision, by, number string, at time.Time, phase string) map[string]any {
+	out := decided(cr, decision, by, at, phase)
+	a := out["spec"].(map[string]any)["approval"].(map[string]any)
+	a["source"], a["externalRef"] = "servicenow", number
+	return out
+}
+
+func TestBridgeRules(t *testing.T) {
+	f := newFixture(t)
+	now := f.now
+	old := pendingCR(now.Add(time.Hour))
+	linked := withTicket(old, "CHG0030001")
+	relinked := withTicket(old, "CHG0039999")
+	mirrored := deepCopy(linked)
+	mirrored["status"].(map[string]any)["external"].(map[string]any)["state"] = "Assess"
+	cases := []struct {
+		name      string
+		req       *admissionv1.AdmissionRequest
+		allowed   bool
+		wantInMsg string
+	}{
+		{"bridge links a ticket", crUpdate(bridge, old, linked), true, ""},
+		{"bridge mirrors ticket state", crUpdate(bridge, linked, mirrored), true, ""},
+		{"bridge records the ticket's approval", crUpdate(bridge, linked, externallyDecided(linked, "Approved", "servicenow:jane.cab", "CHG0030001", now, "Approved")), true, ""},
+		{"bridge links and decides at once", crUpdate(bridge, old, externallyDecided(linked, "Approved", "servicenow:jane.cab", "CHG0030001", now, "Approved")), true, ""},
+		{"bridge relinks to another ticket", crUpdate(bridge, linked, relinked), false, "cannot be changed"},
+		{"bridge removes the link", crUpdate(bridge, linked, old), false, "cannot be removed"},
+		{"bridge decides with no ticket", crUpdate(bridge, old, externallyDecided(old, "Approved", "servicenow:jane.cab", "CHG0030001", now, "Approved")), false, "needs a linked ticket"},
+		{"bridge cites another ticket", crUpdate(bridge, linked, externallyDecided(linked, "Approved", "servicenow:jane.cab", "CHG0039999", now, "Approved")), false, "must come from the linked ticket"},
+		{"bridge approves without approver prefix", crUpdate(bridge, linked, externallyDecided(linked, "Approved", "jane.cab", "CHG0030001", now, "Approved")), false, "servicenow:<user>"},
+		{"bridge changes phase alone", crUpdate(bridge, linked, func() map[string]any {
+			m := deepCopy(linked)
+			m["status"].(map[string]any)["phase"] = "Approved"
+			return m
+		}()), false, "only when a decision"},
+		{"bridge tampers with spec", crUpdate(bridge, linked, func() map[string]any { m := deepCopy(linked); m["spec"].(map[string]any)["score"] = 1; return m }()), false, "only spec.approval"},
+		{"human edits the ticket link", crUpdate("alice", linked, relinked), false, "maintained by the change-management bridge"},
+		{"human forges an external approval", crUpdate("alice", linked, externallyDecided(linked, "Approved", "alice", "CHG0030001", now, "Approved")), false, "only the change-management bridge"},
+		{"human approves a linked request locally", crUpdate("alice", linked, decided(linked, "Approved", "alice", now, "Approved")), true, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resp := f.h.Review(context.Background(), c.req)
+			msg := ""
+			if resp.Result != nil {
+				msg = resp.Result.Message
+			}
+			if resp.Allowed != c.allowed {
+				t.Fatalf("allowed = %v, want %v (%s)", resp.Allowed, c.allowed, msg)
+			}
+			if c.wantInMsg != "" && !strings.Contains(msg, c.wantInMsg) {
+				t.Errorf("message %q does not contain %q", msg, c.wantInMsg)
+			}
+		})
+	}
+
+	del := &admissionv1.AdmissionRequest{Resource: metav1.GroupVersionResource{Group: "kubeamber.dev", Version: "v1alpha1", Resource: "changerequests"},
+		Operation: admissionv1.Delete, UserInfo: authnv1.UserInfo{Username: bridge}}
+	if f.h.Review(context.Background(), del).Allowed {
+		t.Error("the bridge deleted a change request")
+	}
+}
+
+func TestRequireExternal(t *testing.T) {
+	f := newFixture(t)
+	p, err := policy.Parse([]byte(testPolicy + "  approvals: {requireExternal: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.h.Policy = func() *policy.Policy { return p }
+	f.h.Engine.Policy = f.h.Policy
+	now := f.now
+	linked := withTicket(pendingCR(now.Add(time.Hour)), "CHG0030001")
+
+	resp := f.h.Review(context.Background(), crUpdate("alice", linked, decided(linked, "Approved", "alice", now, "Approved")))
+	if resp.Allowed || !strings.Contains(resp.Result.Message, "servicenow as CHG0030001") {
+		t.Errorf("local approval under requireExternal: %+v", resp.Result)
+	}
+	if resp := f.h.Review(context.Background(), crUpdate("alice", linked, decided(linked, "Rejected", "alice", now, "Rejected"))); !resp.Allowed {
+		t.Error("local rejection should still be allowed")
+	}
+
+	// The agent is told the change waits for the change-management system.
+	resp = f.h.Review(context.Background(), scaleToZero(agentUser))
+	if resp.Allowed || !strings.Contains(resp.Result.Message, "change-management system") || strings.Contains(resp.Result.Message, "kubeamber approve") {
+		t.Errorf("hold message: %s", resp.Result.Message)
+	}
+}
+
+func TestExternalApprovalHonoursWindow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.h.Review(ctx, scaleToZero(agentUser))
+	cr := f.store.crs["cr-1"]
+	start, end := metav1.NewTime(f.now.Add(time.Hour)), metav1.NewTime(f.now.Add(3*time.Hour))
+	cr.Status.External = &changerequest.External{System: "servicenow", ID: "sys-1", Number: "CHG0030001", State: "Scheduled",
+		URL: "https://snow.example/change_request.do?sys_id=sys-1", PlannedStart: &start, PlannedEnd: &end}
+
+	// Waiting: the agent is pointed at the ticket.
+	resp := f.h.Review(ctx, scaleToZero(agentUser))
+	if resp.Allowed || !strings.Contains(resp.Result.Message, "waiting for approval in servicenow as CHG0030001 (https://snow.example") {
+		t.Fatalf("pending message: %s", resp.Result.Message)
+	}
+
+	cr.Spec.Approval = &changerequest.Approval{Decision: changerequest.DecisionApproved, By: "servicenow:jane.cab", Reason: "CHG0030001 approved in ServiceNow",
+		At: metav1.NewTime(f.now), Source: "servicenow", ExternalRef: "CHG0030001"}
+	cr.Status.Phase = changerequest.Approved
+
+	// Before the window: held, not consumed.
+	resp = f.h.Review(ctx, scaleToZero(agentUser))
+	if resp.Allowed || !strings.Contains(resp.Result.Message, "change window opens at") || cr.Status.Phase != changerequest.Approved {
+		t.Fatalf("before window: %s (phase %s)", resp.Result.Message, cr.Status.Phase)
+	}
+
+	// Inside the window, even past the in-cluster approval TTL: allowed once.
+	f.now = f.now.Add(2 * time.Hour)
+	resp = f.h.Review(ctx, scaleToZero(agentUser))
+	if !resp.Allowed || !strings.Contains(resp.Warnings[0], "approved by servicenow:jane.cab in servicenow CHG0030001") {
+		t.Fatalf("inside window: %+v", resp)
 	}
 }
