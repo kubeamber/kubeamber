@@ -572,3 +572,42 @@ func TestExternalApprovalHonoursWindow(t *testing.T) {
 		t.Fatalf("inside window: %+v", resp)
 	}
 }
+
+// --- agent owners ---
+
+type fixedOwners map[string]string
+
+func (f fixedOwners) Owner(_ context.Context, user string) string { return f[user] }
+
+func TestOwnerCannotApproveTheirAgent(t *testing.T) {
+	f := newFixture(t)
+	f.h.Owners = fixedOwners{agentUser: "alice"}
+	ctx := context.Background()
+	f.h.Review(ctx, scaleToZero(agentUser))
+	if got := f.store.crs["cr-1"].Spec.Owner; got != "alice" {
+		t.Fatalf("owner recorded as %q", got)
+	}
+
+	now := f.now
+	held := pendingCR(now.Add(time.Hour))
+	held["spec"].(map[string]any)["owner"] = "alice"
+	resp := f.h.Review(ctx, crUpdate("alice", held, decided(held, "Approved", "alice", now, "Approved")))
+	if resp.Allowed || !strings.Contains(resp.Result.Message, "you launched this agent") {
+		t.Fatalf("owner approval: %+v", resp.Result)
+	}
+	if resp := f.h.Review(ctx, crUpdate("alice", held, decided(held, "Rejected", "alice", now, "Rejected"))); !resp.Allowed {
+		t.Error("the owner should still be able to reject")
+	}
+	if resp := f.h.Review(ctx, crUpdate("bob", held, decided(held, "Approved", "bob", now, "Approved"))); !resp.Allowed {
+		t.Errorf("a colleague should be able to approve: %+v", resp.Result)
+	}
+
+	p, err := policy.Parse([]byte(testPolicy + "  approvals: {allowOwnerApproval: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.h.Policy = func() *policy.Policy { return p }
+	if resp := f.h.Review(ctx, crUpdate("alice", held, decided(held, "Approved", "alice", now, "Approved"))); !resp.Allowed {
+		t.Errorf("allowOwnerApproval should let the owner approve: %+v", resp.Result)
+	}
+}

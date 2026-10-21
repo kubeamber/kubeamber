@@ -132,6 +132,12 @@ func TestAssess(t *testing.T) {
 			wantReason: "about 60 pods",
 		},
 		{
+			name:       "mint a token for another service account",
+			change:     Change{Operation: "CREATE", Kind: "ServiceAccount", Resource: "serviceaccounts", SubResource: "token", Namespace: "shop", Name: "deployer"},
+			want:       50,
+			wantReason: "acts as that identity",
+		},
+		{
 			name:   "evict a pod",
 			change: Change{Operation: "CREATE", Kind: "Pod", Resource: "pods", SubResource: "eviction", Namespace: "shop", Name: "p"},
 			want:   25,

@@ -5,6 +5,53 @@ the cluster with its own identity, without code changes in the agent. The
 integrations below make that identity explicit, and let agents preview
 changes and explain themselves.
 
+## Agents from any provider
+
+KubeAmber never asks which company or model is behind an agent. It recognises
+agents by the Kubernetes identity they use. Every cloud maps its own identities
+into Kubernetes, so the same policy covers agents from Azure, AWS, Google,
+Anthropic, OpenAI or your own code.
+
+**The universal method:**
+1. Run `kubectl auth whoami` with the agent's credentials.
+2. Put the username or a group it prints into `spec.agents`.
+3. Confirm the match with `kubeamber check --as <username> --group <group>`.
+
+| Where the agent runs | How it reaches the cluster | Match it in the policy with |
+|---|---|---|
+| **AKS** (Azure SRE Agent, agents on Azure AI Foundry, Copilot agents) | A managed identity or service principal, through Entra ID | `groups:` the object ID of an Entra group that holds your agents' identities (more robust than individual IDs) |
+| **EKS** (Amazon Bedrock AgentCore, Amazon Q Developer, agents on Lambda or ECS) | An IAM role, through an EKS access entry | `users: ["arn:aws:sts::<account>:assumed-role/<role>/*"]`, or give the access entry `--kubernetes-groups kubeamber:agents` and match the group |
+| **GKE** (Gemini CLI, kubectl-ai, agents on Vertex AI) | A Google service account | `users: ["<sa>@<project>.iam.gserviceaccount.com"]`, or a Google Group with Google Groups for RBAC |
+| **A workstation** (Claude Code, Codex, Cursor, Copilot in VS Code) | Its own kubeconfig: a client certificate with `O=kubeamber:agents`, or an OIDC token whose groups include it | `groups: ["kubeamber:agents"]` |
+| **Inside the cluster** (kagent, HolmesGPT, k8sgpt, your own operator) | A service account | `serviceAccounts: ["kubeamber-agents/*"]` |
+
+A single group such as `kubeamber:agents`, assigned by each cloud's identity
+mapping, keeps the policy the same across providers. Separate agent profiles
+let you treat providers differently. For example, coding agents can stay out
+of production while SRE agents may change it with approval:
+
+```yaml
+rules:
+  - name: coding-agents-stay-out-of-prod
+    match: {agents: [claude-code, gemini-cli], namespaces: ["prod*"]}
+    action: deny
+    reason: coding agents work in dev; production changes come from the SRE agents
+```
+
+The MCP server (`kubeamber mcp`) works with any MCP client, so agents built on
+any provider's agent framework can preview changes the same way.
+
+**Two limits apply whatever the provider.**
+- **An agent that acts with a human's credentials is judged as that human.**
+  This covers portal assistants that run commands as the signed-in user, and
+  a coding agent using your personal kubeconfig. Give every agent its own
+  identity; for agents you launch yourself, `kubeamber agent-kubeconfig` does
+  it in one command (see [below](#give-each-agent-its-own-identity)).
+- **Cloud control-plane calls never reach the Kubernetes API.** Examples are
+  deleting a cluster, resizing a node pool, or changing IAM. Govern those with
+  the cloud's own controls: Azure Policy, AWS service control policies,
+  Google Organization Policy.
+
 ## kagent
 
 kagent runs agents as Kubernetes resources, each with a service account.
@@ -49,6 +96,41 @@ Check what the API server sees:
 ```sh
 kubectl --kubeconfig agent.kubeconfig auth whoami
 ```
+
+## Give each agent its own identity
+
+An agent that uses your kubeconfig is judged as you. `kubeamber
+agent-kubeconfig` gives it an identity of its own in one step:
+
+```sh
+kubeamber agent-kubeconfig claude-code --role edit --namespace dev --namespace staging --duration 8h
+```
+
+This does five things:
+1. Creates the service account `kubeamber-agents/claude-code-<you>`,
+   annotated with you as its owner (`kubeamber.dev/owner`).
+2. Binds the ClusterRole you name in the namespaces you name, or
+   cluster-wide with `--cluster-wide`. The API server refuses to bind a role
+   you do not hold, so an agent can never get more access than you have.
+   Without `--role`, nothing is bound and the identity has whatever
+   administrators granted service accounts in `kubeamber-agents`.
+3. Checks the identity against KubeAmber's policy, and refuses (unless
+   `--allow-ungated`) if KubeAmber would not review it as an agent.
+4. Mints a bound token (10 minutes to 24 hours) and writes a kubeconfig,
+   readable only by you.
+5. From then on, KubeAmber records you as the owner of every change it holds
+   for that agent, and refuses your own approval
+   (`approvals.allowOwnerApproval` turns that off for one-person teams).
+
+`kubeamber agent-kubeconfig claude-code --revoke` deletes the bindings and
+the service account. The agent's access ends at once, and its tokens stop
+authenticating within seconds.
+
+Agents cannot work around this:
+- Changing or forging the `kubeamber.dev/owner` annotation on a service
+  account is denied.
+- Minting a token for another service account is held, and denied for
+  KubeAmber's own service accounts.
 
 ## Claude Code and other MCP clients
 

@@ -112,10 +112,10 @@ make kind-demo
 ```
 
 This creates a kind cluster, builds and loads the image, deploys KubeAmber, and
-plays an agent with `cluster-admin` through 37 scenarios
+plays an agent with `cluster-admin` through 52 scenarios
 ([hack/e2e.sh](hack/e2e.sh)): allow, hold, approve, retry, reject, deny, and
-attempts to switch KubeAmber off, and a change approved through a simulated
-ServiceNow. RBAC allows every one of them; KubeAmber decides.
+attempts to switch KubeAmber off, a change approved through a simulated
+ServiceNow, and a developer giving their agent its own revocable identity. RBAC allows every one of them; KubeAmber decides.
 
 To install on an existing cluster (Kubernetes 1.30+, for `matchConditions`):
 
@@ -148,10 +148,19 @@ agents:
     serviceAccounts: ["holmesgpt/holmesgpt-holmes-service-account"]
 ```
 
-**Workstation agents** (Claude Code, kubectl-ai, Cursor): give the agent its
-own kubeconfig whose client certificate or OIDC token carries the group
-`kubeamber:agents`. KubeAmber cannot tell an agent apart from you if it uses your
-credentials.
+**Workstation agents** (Claude Code, Codex, kubectl-ai, Cursor): never hand an
+agent your own kubeconfig, because KubeAmber would see you, not the agent. Give
+it a short-lived identity of its own instead:
+
+```sh
+kubeamber agent-kubeconfig claude-code --role edit --namespace dev --duration 8h
+KUBECONFIG=./claude-code.kubeconfig claude
+kubeamber agent-kubeconfig claude-code --revoke    # kill switch
+```
+
+The agent gets only the access you bind, and never more than you have. You are
+recorded as its owner, and a colleague, not you, has to approve its held
+changes.
 
 **Preview before acting (MCP).** `kubeamber mcp` serves three read-only tools over
 stdio: `kubeamber_preview`, `kubeamber_policy` and `kubeamber_change_request`. With

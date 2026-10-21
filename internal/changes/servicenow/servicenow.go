@@ -514,6 +514,9 @@ func description(cr *changerequest.ChangeRequest) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "An AI agent's change to Kubernetes was held by KubeAmber for approval.\n\n")
 	fmt.Fprintf(&b, "Agent: %s (identity %s)\n", cr.Spec.Agent, cr.Spec.User)
+	if cr.Spec.Owner != "" {
+		fmt.Fprintf(&b, "Launched by: %s (may not approve this change)\n", cr.Spec.Owner)
+	}
 	fmt.Fprintf(&b, "Change: %s %s", cr.Spec.Operation, target(cr))
 	if cr.Spec.Target.SubResource != "" {
 		fmt.Fprintf(&b, " [%s]", cr.Spec.Target.SubResource)

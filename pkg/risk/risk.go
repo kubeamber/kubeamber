@@ -171,6 +171,10 @@ func kindFactors(a *Assessment, c Change) {
 		a.add(5, "changes a workload")
 	case "ConfigMap":
 		a.add(5, "changes configuration")
+	case "ServiceAccount":
+		if c.SubResource == "token" {
+			a.add(45, "mints a credential for service account %s (whoever holds it acts as that identity)", c.Name)
+		}
 	case "Pod":
 		if del && hasController(c.OldObject) {
 			a.add(-20, "pod is managed by a controller and will be recreated")

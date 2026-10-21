@@ -195,5 +195,33 @@ check "the bridge closes the ticket with evidence" allowed '"close_code":"succes
   curl -fsS "$SNOW/fake/changes/$TICKET"
 k -n prod scale deploy/checkout --replicas=3 >/dev/null
 
+step "10. A developer gives their agent its own short-lived identity"
+k create clusterrolebinding e2e-bob-approver --clusterrole=kubeamber-approver --user=bob --dry-run=client -o yaml | k apply -f - >/dev/null
+check "mint a kubeconfig for Claude Code" allowed "reviewed as agent profile" -- \
+  tp agent-kubeconfig claude-code --role edit --namespace shop --namespace prod --duration 1h --output "$WORK/claude.kubeconfig"
+claude_kubectl() { kubectl --kubeconfig "$WORK/claude.kubeconfig" "$@"; }
+check "the agent runs as its own identity, not the developer's" allowed "kubeamber-agents:claude-code-" -- claude_kubectl auth whoami
+check "its routine changes are reviewed as an agent's" allowed "kubeamber: ALLOW" -- claude_kubectl -n shop scale deploy/checkout --replicas=5
+check "it only has the access it was given" blocked "[Ff]orbidden" -- claude_kubectl -n kube-system get pods
+check "agents cannot mint a token for KubeAmber's bridge" blocked "KubeAmber's namespace" -- \
+  agent -n kubeamber-system create token kubeamber-bridge
+check "agents cannot quietly become another identity" blocked "HOLD .*mints a credential for service account default" -- \
+  agent -n shop create token default --duration 10m
+check "agents cannot hijack a developer's agent identity" blocked "agent identities owned by a person" -- \
+  agent -n kubeamber-agents annotate serviceaccount "$(claude_kubectl auth whoami -o jsonpath='{.status.userInfo.username}' | cut -d: -f4)" \
+  kubeamber.dev/owner=mallory --overwrite
+check "a risky change by the agent is held" blocked "kubeamber: HOLD \(risk 75/100" -- claude_kubectl -n prod scale deploy/checkout --replicas=0
+CR4=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
+check "the change request records who launched the agent" allowed "^kubernetes-admin$" -- \
+  k get changerequest "$CR4" -o jsonpath='{.spec.owner}'
+check "the developer cannot approve their own agent's change" blocked "you launched this agent" -- tp approve "$CR4"
+check "a colleague can" allowed "approved $CR4" -- tp --as bob approve "$CR4" --reason "pairing on the incident"
+check "the agent's retry is applied" allowed "approved by bob" -- claude_kubectl -n prod scale deploy/checkout --replicas=0
+k -n prod scale deploy/checkout --replicas=3 >/dev/null
+check "revoking the identity removes its access at once" allowed "access is removed now" -- tp agent-kubeconfig claude-code --revoke
+check "  ...so the agent can do nothing" blocked "[Ff]orbidden|Unauthorized" -- claude_kubectl -n shop get pods
+wait_for 30 sh -c "kubectl --kubeconfig $WORK/claude.kubeconfig -n shop get pods 2>&1 | grep -q Unauthorized"
+check "  ...and within seconds its token is rejected outright" blocked "Unauthorized" -- claude_kubectl -n shop get pods
+
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]
