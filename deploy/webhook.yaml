@@ -114,7 +114,7 @@ webhooks:
       - operations: [CREATE, UPDATE, DELETE]
         apiGroups: ["*"]
         apiVersions: ["*"]
-        resources: ["*", "*/scale", "pods/eviction"]
+        resources: ["*", "*/scale", "pods/eviction", "serviceaccounts/token"]
         scope: "*"
       - operations: [CONNECT]
         apiGroups: [""]

@@ -36,10 +36,11 @@ func IsClusterScoped(group, kind string) bool {
 
 // parentKinds maps resources that expose a scale subresource to their kind.
 var parentKinds = map[string][2]string{
-	"deployments":  {"apps", "Deployment"},
-	"statefulsets": {"apps", "StatefulSet"},
-	"replicasets":  {"apps", "ReplicaSet"},
-	"pods":         {"", "Pod"},
+	"deployments":     {"apps", "Deployment"},
+	"statefulsets":    {"apps", "StatefulSet"},
+	"replicasets":     {"apps", "ReplicaSet"},
+	"pods":            {"", "Pod"},
+	"serviceaccounts": {"", "ServiceAccount"},
 }
 
 // ParentKind returns the group and kind of the resource a subresource request
