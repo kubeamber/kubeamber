@@ -147,6 +147,10 @@ type Approvals struct {
 	// `kubeamber bridge`) the only place a held change can be approved.
 	// Rejecting in the cluster still works, because that fails safe.
 	RequireExternal bool `json:"requireExternal,omitempty"`
+	// AllowOwnerApproval lets the person who launched an agent (its
+	// kubeamber.dev/owner) approve that agent's held changes. Off by default:
+	// approving your own agent's change is approving your own change.
+	AllowOwnerApproval bool `json:"allowOwnerApproval,omitempty"`
 }
 
 type Guards struct {

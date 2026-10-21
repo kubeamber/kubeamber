@@ -73,8 +73,12 @@ type Handler struct {
 	// only identity that may link tickets and record decisions made in a
 	// change-management system. Empty disables external decisions.
 	BridgeUser string
-	Now        func() time.Time
-	Log        *slog.Logger
+	// Owners finds the person who launched an agent; optional.
+	Owners interface {
+		Owner(ctx context.Context, username string) string
+	}
+	Now func() time.Time
+	Log *slog.Logger
 
 	tracer    trace.Tracer
 	decisions metric.Int64Counter
@@ -283,6 +287,7 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 	cr, err := h.Store.Create(ctx, &changerequest.ChangeRequest{Spec: changerequest.Spec{
 		Agent:     d.Agent,
 		User:      req.UserInfo.Username,
+		Owner:     h.ownerOf(ctx, req.UserInfo.Username),
 		Operation: change.Operation,
 		Target: changerequest.Target{
 			Group: req.Resource.Group, Version: req.Resource.Version, Resource: req.Resource.Resource,
@@ -365,6 +370,9 @@ func (h *Handler) reviewChangeRequest(req *admissionv1.AdmissionRequest) *admiss
 			return deny("kubeamber: DENY: only the change-management bridge can record decisions made in an external system")
 		case a.By != user:
 			return deny(fmt.Sprintf("kubeamber: DENY: spec.approval.by must be your own identity (%s)", user))
+		case a.Decision == changerequest.DecisionApproved && oldCR.Spec.Owner == user && !p.Spec.Approvals.AllowOwnerApproval:
+			return deny(fmt.Sprintf("kubeamber: DENY: you launched this agent (%s), so someone else must approve its changes; you can still reject it",
+				oldCR.Spec.User))
 		case a.Decision == changerequest.DecisionApproved && p.Spec.Approvals.RequireExternal:
 			where := "your change-management system"
 			if e := oldCR.Status.External; e != nil {
@@ -444,6 +452,17 @@ func checkDecision(name string, oldCR, newCR *changerequest.ChangeRequest, now t
 		return fmt.Sprintf("status.phase must be %s", wantPhase[a.Decision])
 	}
 	return ""
+}
+
+// ownerOf looks up who launched an agent, without holding up admission for
+// long if the lookup is slow.
+func (h *Handler) ownerOf(ctx context.Context, username string) string {
+	if h.Owners == nil {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return h.Owners.Owner(ctx, username)
 }
 
 func factorLines(fs []risk.Factor) []string {

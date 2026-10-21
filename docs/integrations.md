@@ -50,6 +50,41 @@ Check what the API server sees:
 kubectl --kubeconfig agent.kubeconfig auth whoami
 ```
 
+## Give each agent its own identity
+
+An agent that uses your kubeconfig is judged as you. `kubeamber
+agent-kubeconfig` gives it an identity of its own in one step:
+
+```sh
+kubeamber agent-kubeconfig claude-code --role edit --namespace dev --namespace staging --duration 8h
+```
+
+This does five things:
+1. Creates the service account `kubeamber-agents/claude-code-<you>`,
+   annotated with you as its owner (`kubeamber.dev/owner`).
+2. Binds the ClusterRole you name in the namespaces you name, or
+   cluster-wide with `--cluster-wide`. The API server refuses to bind a role
+   you do not hold, so an agent can never get more access than you have.
+   Without `--role`, nothing is bound and the identity has whatever
+   administrators granted service accounts in `kubeamber-agents`.
+3. Checks the identity against KubeAmber's policy, and refuses (unless
+   `--allow-ungated`) if KubeAmber would not review it as an agent.
+4. Mints a bound token (10 minutes to 24 hours) and writes a kubeconfig,
+   readable only by you.
+5. From then on, KubeAmber records you as the owner of every change it holds
+   for that agent, and refuses your own approval
+   (`approvals.allowOwnerApproval` turns that off for one-person teams).
+
+`kubeamber agent-kubeconfig claude-code --revoke` deletes the bindings and
+the service account. The agent's access ends at once, and its tokens stop
+authenticating within seconds.
+
+Agents cannot work around this:
+- Changing or forging the `kubeamber.dev/owner` annotation on a service
+  account is denied.
+- Minting a token for another service account is held, and denied for
+  KubeAmber's own service accounts.
+
 ## Claude Code and other MCP clients
 
 `kubeamber mcp` serves three read-only tools over stdio:

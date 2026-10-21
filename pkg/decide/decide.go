@@ -172,8 +172,21 @@ func (e *Engine) selfProtection(c risk.Change) string {
 		return "agents cannot modify KubeAmber's API definitions"
 	case c.Group == "rbac.authorization.k8s.io" && (c.Name == "kubeamber" || strings.HasPrefix(c.Name, "kubeamber-")):
 		return "agents cannot modify KubeAmber's permissions"
+	case c.GroupKind() == "ServiceAccount" && c.SubResource == "" && annotation(c.Object, OwnerAnnotation) != annotation(c.OldObject, OwnerAnnotation):
+		return "agents cannot create, change or delete agent identities owned by a person (" + OwnerAnnotation + ")"
 	}
 	return ""
+}
+
+// OwnerAnnotation records, on an agent's service account, the person who
+// launched the agent (set by `kubeamber agent-kubeconfig`).
+const OwnerAnnotation = "kubeamber.dev/owner"
+
+func annotation(obj map[string]any, key string) string {
+	meta, _ := obj["metadata"].(map[string]any)
+	ann, _ := meta["annotations"].(map[string]any)
+	v, _ := ann[key].(string)
+	return v
 }
 
 // effectiveNamespace is the namespace a change lands in; for a Namespace

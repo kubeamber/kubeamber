@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/kubeamber/kubeamber/internal/agentid"
 	"github.com/kubeamber/kubeamber/internal/changerequest"
 	"github.com/kubeamber/kubeamber/internal/guards"
 	"github.com/kubeamber/kubeamber/internal/kube"
@@ -114,7 +115,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			}
 			h := webhook.NewHandler(webhook.Handler{
 				Engine: engine, Store: &changerequest.Store{Client: dyn}, Policy: current.Get,
-				SelfUser: selfUser, BridgeUser: bridgeUser, Log: log,
+				SelfUser: selfUser, BridgeUser: bridgeUser, Owners: &agentid.Owners{Client: cs}, Log: log,
 			})
 
 			mux := http.NewServeMux()

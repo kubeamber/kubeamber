@@ -23,9 +23,24 @@ include breaking changes, which are called out.
 - Webhook rules for the bridge identity (`--bridge-service-account`): one
   immutable ticket link, and decisions only for that ticket.
 - `--as` global flag to impersonate a user, like `kubectl --as`.
+- `kubeamber agent-kubeconfig`: gives an agent its own service account,
+  bound only the access its owner chooses (and never more than the owner
+  holds), with a short-lived kubeconfig and a `--revoke` kill switch. The
+  agent is reviewed as an agent, its owner is recorded on every held change
+  (`spec.owner`), and the owner cannot approve those changes unless
+  `approvals.allowOwnerApproval` is set.
 - Simulated ServiceNow (`hack/fakesnow`) and ten new end-to-end scenarios.
 - `make docker-build-local`: small image from a host-compiled binary, used by
   the kind targets.
+
+### Security
+
+- Agents minting tokens for service accounts (`serviceaccounts/token`) were
+  not reviewed, so an agent with RBAC to do so could switch identity, for
+  example to the bridge's. The webhook now reviews token requests (+45, held
+  by default; denied for KubeAmber's own service accounts).
+- Agents cannot create, change or delete service accounts that carry
+  `kubeamber.dev/owner`.
 
 ### Fixed
 

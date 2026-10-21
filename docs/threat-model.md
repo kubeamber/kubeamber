@@ -35,6 +35,9 @@ expected of CNCF projects.
 | An approval is reused for another change, or replayed later | Approvals are bound to a fingerprint of identity, operation, target and content. Each is consumed once under optimistic concurrency and expires after `approvals.ttl`. Post-dated approvals (clock skew > 2 minutes) are rejected. |
 | Someone forges a change-management approval, or points a request at a different, already approved ticket | Only the `kubeamber-bridge` service account can record external decisions, and only for the ticket it linked; the link is immutable once set. Humans cannot write `status.external` or decisions with a `source`. External approvals are honoured only inside the ticket's planned window. |
 | The ServiceNow integration credential leaks | It is read from a mounted Secret, never stored in configuration, and should hold a least-privilege ServiceNow role. On its own it cannot approve a change: an approval also needs the bridge's Kubernetes identity and a ticket linked to a held request. |
+| An agent switches to another identity by minting a token for another service account (`kubectl create token`) | Token requests by agents are reviewed: +45, so held by default, and denied for KubeAmber's own service accounts, including the bridge. |
+| An agent takes over or forges a developer's agent identity, to escape the owner check | Agents cannot create, change or delete service accounts that carry `kubeamber.dev/owner`. |
+| A developer approves their own agent's held change | The ChangeRequest records the agent's owner; the webhook refuses the owner's approval unless `approvals.allowOwnerApproval` is set. |
 | An approved request is tampered with after approval | Only `spec.approval` and the matching `status.phase` may change; the recorded request is immutable. |
 | Agents act during a freeze or an incident | Freeze windows and Prometheus guards hold changes. A failing guard query holds by default. |
 | KubeAmber is unavailable | Agents are blocked (fail-closed); non-agent traffic is unaffected because match conditions keep it away from the webhook. |
@@ -55,8 +58,12 @@ should cover them with other controls.
   therefore KubeAmber. Do not give agents node access.
 - **Identity misuse.** KubeAmber recognises agents by Kubernetes identity. An
   agent that runs with a human's kubeconfig, or can impersonate another user
-  (`impersonate` RBAC verb), is judged as that identity. Give every agent its
-  own identity and do not grant it impersonation.
+  (`impersonate` RBAC verb), is judged as that identity. `kubeamber
+  agent-kubeconfig` makes giving each agent its own identity a single command.
+  Do not grant agents impersonation: it is an authorisation check, invisible
+  to admission. Workloads an agent creates run as their own service account,
+  so an agent allowed to create pods with another service account can act
+  through them.
 - **Changes made by controllers on an agent's behalf.** If an agent commits to
   a GitOps repository, the change is applied by the GitOps controller's
   identity. Gate those changes with `kubeamber check` in CI.

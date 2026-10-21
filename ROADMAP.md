@@ -24,6 +24,7 @@ any item. Larger items get a design issue before implementation.
 - `AgentPolicy` CRD as an alternative to the ConfigMap file, with status conditions
 - Prometheus `/metrics` endpoint alongside OTLP
 - [x] ServiceNow change management through `kubeamber bridge` ([proposal 0001](docs/proposals/0001-change-management.md), phase 1)
+- [x] Per-agent identities (`kubeamber agent-kubeconfig`), with owner recorded and owner self-approval refused
 - Approval notifications and one-click decisions in Slack and Microsoft Teams
 - Change management phase 2: agents working under human-raised tickets, standard changes for allowed changes, emergency changes during incidents
 - More change-management providers: Jira Service Management, BMC Helix, Freshservice
