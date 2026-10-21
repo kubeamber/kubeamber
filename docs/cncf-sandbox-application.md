@@ -96,18 +96,26 @@ None yet. See [ADOPTERS.md](../ADOPTERS.md).
 
 The name "KubeAmber" was chosen after checking for collisions with existing
 open-source projects and companies in the cloud-native and AI-agent spaces.
-Several earlier candidates were already in use. Before submission: register
-the `kubeamber.dev` domain (also the API group), secure the `kubeamber` GitHub
-organisation, and confirm the name is clear for transfer to the Linux
-Foundation.
+Several earlier candidates were already in use. The `kubeamber.dev` domain
+(also the API group) is registered to the maintainer and can be transferred
+to the Linux Foundation on acceptance. Before submission: secure the
+`kubeamber` GitHub organisation and confirm the name is clear for transfer.
+
+## Additional information
+
+KubeAmber is developed with AI coding assistance, disclosed and governed by
+the policy in [CONTRIBUTING.md](../CONTRIBUTING.md#ai-assistance). The
+maintainers review and own every change.
 
 ## Prerequisites still missing
 
-- [ ] At least two maintainers, ideally from different organisations.
+- [ ] At least three maintainers from two or more organisations (the CNCF
+  lifecycle page lists this for Sandbox entry).
 - [ ] Production or pilot adopters willing to be listed.
 - [ ] OpenSSF Best Practices badge (passing level) and OpenSSF Scorecard results.
 - [ ] Security self-assessment (TAG Security template), building on [threat-model.md](threat-model.md).
 - [ ] Public community meetings or office hours, with notes.
 - [ ] Tagged, signed releases with SBOMs.
 - [ ] Contributor ladder and a documented release process.
-- [ ] Domain `kubeamber.dev` registered and redirected to the docs.
+- [x] Domain `kubeamber.dev` registered.
+- [ ] `kubeamber.dev` serving the docs (GitHub Pages, HTTPS enforced).

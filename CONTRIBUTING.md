@@ -75,6 +75,24 @@ bin/kubeamber check -f examples/manifests/scale-to-zero.yaml \
   is enough to merge, except for changes covered by
   [GOVERNANCE.md](GOVERNANCE.md#decision-making), which need wider agreement.
 
+## AI assistance
+
+KubeAmber is developed with the help of AI coding assistants, and
+contributions made with them are welcome. The rules follow the Kubernetes
+project's AI policy and the
+[Linux Foundation's guidance on generative AI](https://www.linuxfoundation.org/legal/generative-ai):
+
+- **Disclose it.** Say in the pull request description which parts were
+  written with AI assistance. A sentence is enough.
+- **Own it.** You sign off the DCO, so you must have reviewed every line and
+  be able to explain and defend the change in review. Pull requests whose
+  author cannot explain them are closed.
+- **No AI credit in commits.** Do not add AI tools as co-authors or use
+  `Co-Authored-By`, `Assisted-by` or similar trailers. An AI tool cannot
+  certify the DCO; the human who signs off is the author.
+- **Check provenance.** Make sure the tool's terms allow contributing its
+  output under Apache-2.0, and that it has not reproduced third-party code.
+
 ## Reporting bugs and security issues
 
 Use the issue templates for bugs and feature requests. Report

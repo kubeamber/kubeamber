@@ -1,6 +1,6 @@
 # Maintainers
 
-| Name | GitHub | Affiliation | Areas |
+| Name | ID | Company/Organization | Areas |
 |---|---|---|---|
 | Sathpal Singh | [@sathpal](https://github.com/sathpal) | Independent | All |
 
