@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -61,8 +62,12 @@ type Handler struct {
 	Policy func() *policy.Policy
 	// SelfUser is KubeAmber's own service account username.
 	SelfUser string
-	Now      func() time.Time
-	Log      *slog.Logger
+	// BridgeUser is the service account username of `kubeamber bridge`, the
+	// only identity that may link tickets and record decisions made in a
+	// change-management system. Empty disables external decisions.
+	BridgeUser string
+	Now        func() time.Time
+	Log        *slog.Logger
 
 	tracer    trace.Tracer
 	decisions metric.Int64Counter
@@ -214,8 +219,14 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 		return deny(fmt.Sprintf("%s. KubeAmber could not look up approvals (%v), so the change is held; retry shortly.", msg, err)), "", "hold"
 	}
 	for _, cr := range existing {
+		ext := cr.Status.External
 		switch cr.Effective(now, p.Spec.Approvals.TTL.Duration) {
 		case changerequest.Approved:
+			a := cr.Spec.Approval
+			if a.Source != "" && ext != nil && ext.PlannedStart != nil && now.Before(ext.PlannedStart.Time) {
+				return deny(fmt.Sprintf("%s. Approved in %s as %s, but its change window opens at %s. Retry this exact change then.",
+					msg, a.Source, a.ExternalRef, ext.PlannedStart.UTC().Format(time.RFC3339))), cr.Name, "hold"
+			}
 			err := h.Store.SetPhase(ctx, cr, changerequest.Consumed, now)
 			if errors.Is(err, changerequest.ErrAlreadyUsed) {
 				continue
@@ -223,16 +234,35 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 			if err != nil {
 				return deny(fmt.Sprintf("%s. Change request %s is approved but could not be marked as used (%v); retry.", msg, cr.Name, err)), cr.Name, "hold"
 			}
-			a := cr.Spec.Approval
-			warn := fmt.Sprintf("kubeamber: ALLOW (approved by %s in change request %s): %s", a.By, cr.Name, a.Reason)
+			where := "change request " + cr.Name
+			if a.ExternalRef != "" {
+				where = fmt.Sprintf("%s %s, change request %s", a.Source, a.ExternalRef, cr.Name)
+			}
+			warn := fmt.Sprintf("kubeamber: ALLOW (approved by %s in %s): %s", a.By, where, a.Reason)
 			return &admissionv1.AdmissionResponse{Allowed: true, Warnings: []string{warn}}, cr.Name, "approved"
 		case changerequest.Pending:
+			switch {
+			case ext != nil:
+				link := ""
+				if ext.URL != "" {
+					link = " (" + ext.URL + ")"
+				}
+				return deny(fmt.Sprintf("%s. Change request %s is waiting for approval in %s as %s%s, currently %s. Retry this exact change once it is approved.",
+					msg, cr.Name, ext.System, ext.Number, link, ext.State)), cr.Name, "hold"
+			case p.Spec.Approvals.RequireExternal:
+				return deny(fmt.Sprintf("%s. Change request %s is waiting for a ticket to be opened in your change-management system. Retry this exact change once it is approved there.",
+					msg, cr.Name)), cr.Name, "hold"
+			}
 			return deny(fmt.Sprintf("%s. Change request %s is still waiting for a human. Ask an operator to run `kubeamber approve %s`, then retry this exact change.",
 				msg, cr.Name, cr.Name)), cr.Name, "hold"
 		case changerequest.Rejected:
 			if a := cr.Spec.Approval; a != nil && now.Before(a.At.Add(p.Spec.Approvals.PendingTTL.Duration)) {
-				return deny(fmt.Sprintf("%s. A human (%s) rejected this change in %s: %q. Do not retry it.",
-					msg, a.By, cr.Name, a.Reason)), cr.Name, "rejected"
+				where := cr.Name
+				if a.ExternalRef != "" {
+					where = fmt.Sprintf("%s %s (change request %s)", a.Source, a.ExternalRef, cr.Name)
+				}
+				return deny(fmt.Sprintf("%s. %s rejected this change in %s: %q. Do not retry it.",
+					msg, a.By, where, a.Reason)), cr.Name, "rejected"
 			}
 		}
 	}
@@ -247,6 +277,7 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 		},
 		Score:       d.Score,
 		Reasons:     d.Reasons,
+		Factors:     factorLines(d.Factors),
 		Summary:     d.Summary,
 		Intent:      intent,
 		TraceParent: traceparent,
@@ -256,22 +287,32 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 	if err != nil {
 		return deny(fmt.Sprintf("%s. KubeAmber could not record a change request (%v); retry shortly.", msg, err)), "", "hold"
 	}
+	if p.Spec.Approvals.RequireExternal {
+		return deny(fmt.Sprintf("%s. Held as change request %s; a ticket is being opened in your change-management system. Retry this exact change once it is approved there.",
+			msg, cr.Name)), cr.Name, "hold"
+	}
 	return deny(fmt.Sprintf("%s. Held for human approval as change request %s (expires in %s). Ask an operator to run `kubeamber approve %s`, then retry this exact change.",
 		msg, cr.Name, p.Spec.Approvals.PendingTTL.Duration, cr.Name)), cr.Name, "hold"
 }
 
-// reviewChangeRequest enforces how humans may change a ChangeRequest: only
-// by recording their own decision on a pending request that they did not
-// raise themselves.
+// reviewChangeRequest enforces who may change a ChangeRequest, and how.
+// Agents may not touch them at all. Humans may record their own decision on
+// a pending request they did not raise. The change-management bridge may
+// link one ticket and record the decision made on it.
 func (h *Handler) reviewChangeRequest(req *admissionv1.AdmissionRequest) *admissionv1.AdmissionResponse {
 	user := req.UserInfo.Username
-	if h.Policy().MatchAgent(user, req.UserInfo.Groups) != nil {
+	p := h.Policy()
+	if p.MatchAgent(user, req.UserInfo.Groups) != nil {
 		return deny("kubeamber: DENY: agents cannot create, approve, modify or delete change requests")
 	}
+	bridge := h.BridgeUser != "" && user == h.BridgeUser
 	switch req.Operation {
 	case admissionv1.Create:
 		return deny("kubeamber: DENY: change requests are created by KubeAmber itself")
 	case admissionv1.Delete, admissionv1.Connect:
+		if bridge {
+			return deny("kubeamber: DENY: the change-management bridge cannot delete change requests")
+		}
 		return &admissionv1.AdmissionResponse{Allowed: true}
 	}
 
@@ -288,6 +329,16 @@ func (h *Handler) reviewChangeRequest(req *admissionv1.AdmissionRequest) *admiss
 	if !reflect.DeepEqual(oldSpec, newSpec) {
 		return deny("kubeamber: DENY: only spec.approval of a change request may be changed")
 	}
+	if !reflect.DeepEqual(oldCR.Status.ConsumedAt, newCR.Status.ConsumedAt) {
+		return deny("kubeamber: DENY: status.consumedAt is set by KubeAmber when the change is applied")
+	}
+	if bridge {
+		return h.reviewBridgeUpdate(req.Name, oldCR, newCR)
+	}
+
+	if !reflect.DeepEqual(oldCR.Status.External, newCR.Status.External) {
+		return deny("kubeamber: DENY: status.external is maintained by the change-management bridge")
+	}
 	a := newCR.Spec.Approval
 	if reflect.DeepEqual(oldCR.Spec.Approval, a) {
 		if oldCR.Status.Phase != newCR.Status.Phase {
@@ -295,36 +346,99 @@ func (h *Handler) reviewChangeRequest(req *admissionv1.AdmissionRequest) *admiss
 		}
 		return &admissionv1.AdmissionResponse{Allowed: true}
 	}
+	if a != nil {
+		switch {
+		case a.Source != "" || a.ExternalRef != "":
+			return deny("kubeamber: DENY: only the change-management bridge can record decisions made in an external system")
+		case a.By != user:
+			return deny(fmt.Sprintf("kubeamber: DENY: spec.approval.by must be your own identity (%s)", user))
+		case a.Decision == changerequest.DecisionApproved && p.Spec.Approvals.RequireExternal:
+			where := "your change-management system"
+			if e := oldCR.Status.External; e != nil {
+				where = fmt.Sprintf("%s as %s", e.System, e.Number)
+			}
+			return deny(fmt.Sprintf("kubeamber: DENY: this cluster requires approvals to be recorded in %s; you can still reject it here", where))
+		}
+	}
+	if reason := checkDecision(req.Name, oldCR, newCR, h.Now()); reason != "" {
+		return deny("kubeamber: DENY: " + reason)
+	}
+	h.Log.Info("change request decided", "changeRequest", req.Name, "decision", a.Decision, "by", user,
+		"agent", oldCR.Spec.Agent, "reason", a.Reason)
+	return &admissionv1.AdmissionResponse{Allowed: true}
+}
 
-	now := h.Now()
+// reviewBridgeUpdate enforces what the change-management bridge may write:
+// one immutable ticket link, its mirrored state, and the decision made on
+// that ticket.
+func (h *Handler) reviewBridgeUpdate(name string, oldCR, newCR *changerequest.ChangeRequest) *admissionv1.AdmissionResponse {
+	oe, ne := oldCR.Status.External, newCR.Status.External
+	switch {
+	case oe != nil && ne == nil:
+		return deny("kubeamber: DENY: a linked ticket cannot be removed")
+	case ne != nil && (ne.System == "" || ne.ID == "" || ne.Number == ""):
+		return deny("kubeamber: DENY: status.external needs system, id and number")
+	case oe != nil && !oe.SameTicket(ne):
+		return deny(fmt.Sprintf("kubeamber: DENY: %s is linked to %s %s; the link cannot be changed", name, oe.System, oe.Number))
+	}
+	a := newCR.Spec.Approval
+	if reflect.DeepEqual(oldCR.Spec.Approval, a) {
+		if oldCR.Status.Phase != newCR.Status.Phase {
+			return deny("kubeamber: DENY: status.phase changes only when a decision is recorded")
+		}
+		return &admissionv1.AdmissionResponse{Allowed: true}
+	}
+	if ne == nil {
+		return deny("kubeamber: DENY: an external decision needs a linked ticket")
+	}
+	if a != nil && (a.Source != ne.System || a.ExternalRef != ne.Number || !strings.HasPrefix(a.By, ne.System+":")) {
+		return deny(fmt.Sprintf("kubeamber: DENY: an external decision must come from the linked ticket (%s %s) and name its approver as %s:<user>",
+			ne.System, ne.Number, ne.System))
+	}
+	if reason := checkDecision(name, oldCR, newCR, h.Now()); reason != "" {
+		return deny("kubeamber: DENY: " + reason)
+	}
+	h.Log.Info("change request decided externally", "changeRequest", name, "decision", a.Decision, "by", a.By,
+		"ticket", ne.Number, "system", ne.System, "agent", oldCR.Spec.Agent)
+	return &admissionv1.AdmissionResponse{Allowed: true}
+}
+
+// checkDecision validates a newly recorded decision, whoever records it, and
+// returns why it is invalid or "".
+func checkDecision(name string, oldCR, newCR *changerequest.ChangeRequest, now time.Time) string {
+	a := newCR.Spec.Approval
 	wantPhase := map[changerequest.Decision]changerequest.Phase{
 		changerequest.DecisionApproved: changerequest.Approved,
 		changerequest.DecisionRejected: changerequest.Rejected,
 	}
 	switch {
 	case oldCR.Spec.Approval != nil:
-		return deny(fmt.Sprintf("kubeamber: DENY: %s was already decided by %s", req.Name, oldCR.Spec.Approval.By))
+		return fmt.Sprintf("%s was already decided by %s", name, oldCR.Spec.Approval.By)
 	case a == nil:
-		return deny("kubeamber: DENY: a recorded decision cannot be removed")
+		return "a recorded decision cannot be removed"
 	case oldCR.Status.Phase != changerequest.Pending && oldCR.Status.Phase != "":
-		return deny(fmt.Sprintf("kubeamber: DENY: %s is %s, not Pending", req.Name, oldCR.Status.Phase))
+		return fmt.Sprintf("%s is %s, not Pending", name, oldCR.Status.Phase)
 	case wantPhase[a.Decision] == "":
-		return deny("kubeamber: DENY: spec.approval.decision must be Approved or Rejected")
-	case a.By != user:
-		return deny(fmt.Sprintf("kubeamber: DENY: spec.approval.by must be your own identity (%s)", user))
+		return "spec.approval.decision must be Approved or Rejected"
 	case a.By == oldCR.Spec.User:
-		return deny("kubeamber: DENY: the identity that requested a change cannot approve it")
+		return "the identity that requested a change cannot approve it"
 	case a.At.Sub(now).Abs() > maxClockSkew:
-		return deny("kubeamber: DENY: spec.approval.at must be the current time")
-	case a.Decision == changerequest.DecisionApproved && now.After(oldCR.Spec.ExpiresAt.Time):
-		return deny(fmt.Sprintf("kubeamber: DENY: %s expired at %s; the agent must retry to raise a new one",
-			req.Name, oldCR.Spec.ExpiresAt.UTC().Format(time.RFC3339)))
+		return "spec.approval.at must be the current time"
+	case a.Decision == changerequest.DecisionApproved && now.After(newCR.Deadline()):
+		return fmt.Sprintf("%s expired at %s; the agent must retry to raise a new one",
+			name, newCR.Deadline().UTC().Format(time.RFC3339))
 	case newCR.Status.Phase != wantPhase[a.Decision]:
-		return deny(fmt.Sprintf("kubeamber: DENY: status.phase must be %s", wantPhase[a.Decision]))
+		return fmt.Sprintf("status.phase must be %s", wantPhase[a.Decision])
 	}
-	h.Log.Info("change request decided", "changeRequest", req.Name, "decision", a.Decision, "by", user,
-		"agent", oldCR.Spec.Agent, "reason", a.Reason)
-	return &admissionv1.AdmissionResponse{Allowed: true}
+	return ""
+}
+
+func factorLines(fs []risk.Factor) []string {
+	out := make([]string, len(fs))
+	for i, f := range fs {
+		out[i] = fmt.Sprintf("%+d %s", f.Points, f.Reason)
+	}
+	return out
 }
 
 func decodeCR(raw []byte) (*changerequest.ChangeRequest, error) {

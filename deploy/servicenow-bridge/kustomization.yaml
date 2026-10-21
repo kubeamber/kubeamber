@@ -1,0 +1,13 @@
+# Optional: connect held changes to ServiceNow. Install after deploy/.
+#   kubectl apply -k deploy/servicenow-bridge
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - rbac.yaml
+  - deployment.yaml
+configMapGenerator:
+  - name: kubeamber-bridge
+    namespace: kubeamber-system
+    files: [bridge.yaml]
+    options:
+      disableNameSuffixHash: true

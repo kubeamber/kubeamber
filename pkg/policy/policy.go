@@ -140,8 +140,13 @@ type Approvals struct {
 	// TTL is how long an approval stays valid for the agent to retry.
 	TTL metav1.Duration `json:"ttl,omitempty"`
 	// PendingTTL is how long a held change waits for a human before it
-	// expires.
+	// expires. A change linked to a ticket waits until the ticket's planned
+	// window closes instead.
 	PendingTTL metav1.Duration `json:"pendingTTL,omitempty"`
+	// RequireExternal makes the change-management system (through
+	// `kubeamber bridge`) the only place a held change can be approved.
+	// Rejecting in the cluster still works, because that fails safe.
+	RequireExternal bool `json:"requireExternal,omitempty"`
 }
 
 type Guards struct {

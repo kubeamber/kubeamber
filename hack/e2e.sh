@@ -133,5 +133,67 @@ check "agent deletes KubeAmber's webhook configuration" blocked "agents cannot c
 check "KNOWN LIMIT: cluster-admin agent can delete the protecting policy binding" allowed "deleted \(server dry run\)" -- \
   agent delete validatingadmissionpolicybinding kubeamber-protect-admission --dry-run=server
 
+step "9. Change management: the approval comes from ServiceNow (simulated)"
+SNOW_ADDR=127.0.0.1:18080
+SNOW=http://$SNOW_ADDR
+WORK=$(mktemp -d)
+printf 'kubeamber.integration' >"$WORK/username"
+printf 'demo-only' >"$WORK/password"
+cat >"$WORK/bridge.yaml" <<YAML
+apiVersion: kubeamber.dev/v1alpha1
+kind: BridgeConfig
+spec:
+  interval: 2s
+  servicenow:
+    instanceURL: $SNOW
+    auth: {type: basic, usernameFile: $WORK/username, passwordFile: $WORK/password}
+    configurationItems: {"prod*": ci-prod-cluster}
+YAML
+go build -o bin/fakesnow ./hack/fakesnow
+bin/fakesnow --addr "$SNOW_ADDR" >"$WORK/fakesnow.log" 2>&1 &
+SNOW_PID=$!
+k apply -f deploy/servicenow-bridge/rbac.yaml >/dev/null
+"$KUBEAMBER" bridge --context "$CONTEXT" --as system:serviceaccount:kubeamber-system:kubeamber-bridge \
+  --config "$WORK/bridge.yaml" >"$WORK/bridge.log" 2>&1 &
+BRIDGE_PID=$!
+trap 'kill $SNOW_PID $BRIDGE_PID 2>/dev/null || true' EXIT
+
+# wait_for SECONDS COMMAND...: retry until the command succeeds.
+wait_for() {
+  local secs=$1
+  shift
+  for _ in $(seq 1 "$secs"); do
+    "$@" >/dev/null 2>&1 && return 0
+    sleep 1
+  done
+  return 1
+}
+
+check "agent cuts prod/checkout from 3 to 1" blocked "kubeamber: HOLD \(risk 55/100, replicas 3 → 1\)" -- \
+  agent -n prod scale deploy/checkout --replicas=1
+CR3=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
+wait_for 30 sh -c "kubectl --context $CONTEXT get changerequest $CR3 -o jsonpath='{.status.external.number}' | grep -q CHG"
+check "the bridge opened a ServiceNow ticket" allowed "^CHG[0-9]{7}$" -- \
+  k get changerequest "$CR3" -o jsonpath='{.status.external.number}'
+TICKET=$LAST
+check "the ticket carries the agent's reasoning and the CMDB item" allowed '"cmdb_ci":"ci-prod-cluster".*cuts replicas from 3 to 1|cuts replicas from 3 to 1.*"cmdb_ci":"ci-prod-cluster"' -- \
+  curl -fsS "$SNOW/fake/changes/$TICKET"
+check "the agent is pointed at the ticket" blocked "waiting for approval in servicenow as $TICKET" -- \
+  agent -n prod scale deploy/checkout --replicas=1
+check "kubeamber list shows the ticket" allowed "$CR3 +Pending .* $TICKET" -- tp list
+check "a human cannot repoint the ticket" blocked "maintained by the change-management bridge" -- \
+  k patch changerequest "$CR3" --type merge -p '{"status":{"external":{"number":"CHG0000666"}}}'
+check "the CAB approves in ServiceNow" allowed '"approval":"approved"' -- \
+  curl -fsS -X POST "$SNOW/fake/changes/$TICKET/approve?by=jane.cab"
+wait_for 30 sh -c "kubectl --context $CONTEXT get changerequest $CR3 -o jsonpath='{.status.phase}' | grep -q Approved"
+check "the bridge records the ServiceNow approver" allowed "^servicenow:jane.cab$" -- \
+  k get changerequest "$CR3" -o jsonpath='{.spec.approval.by}'
+check "the agent's retry is applied" allowed "approved by servicenow:jane.cab in servicenow $TICKET" -- \
+  agent -n prod scale deploy/checkout --replicas=1
+wait_for 30 sh -c "curl -fsS $SNOW/fake/changes/$TICKET | grep -q '\"close_code\":\"successful\"'"
+check "the bridge closes the ticket with evidence" allowed '"close_code":"successful".*Applied by AI agent sre-agent|Applied by AI agent sre-agent.*"close_code":"successful"' -- \
+  curl -fsS "$SNOW/fake/changes/$TICKET"
+k -n prod scale deploy/checkout --replicas=3 >/dev/null
+
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]

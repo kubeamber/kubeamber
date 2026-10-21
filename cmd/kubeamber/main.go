@@ -37,6 +37,7 @@ can read.`,
 	}
 	root.PersistentFlags().StringVar(&kf.Kubeconfig, "kubeconfig", "", "path to the kubeconfig file")
 	root.PersistentFlags().StringVar(&kf.Context, "context", "", "kubeconfig context to use")
+	root.PersistentFlags().StringVar(&kf.As, "as", "", "impersonate this user, like kubectl --as")
 
 	root.AddCommand(
 		webhookCmd(&kf),
@@ -45,6 +46,7 @@ can read.`,
 		decideCmd(&kf, "approve"),
 		decideCmd(&kf, "reject"),
 		mcpCmd(&kf),
+		bridgeCmd(&kf),
 		&cobra.Command{
 			Use:   "version",
 			Short: "Print the version",

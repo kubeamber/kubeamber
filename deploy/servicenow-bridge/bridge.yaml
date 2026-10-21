@@ -1,0 +1,30 @@
+# Configuration for `kubeamber bridge`. Reference:
+# docs/proposals/0001-change-management.md and docs/integrations.md.
+apiVersion: kubeamber.dev/v1alpha1
+kind: BridgeConfig
+metadata:
+  name: servicenow
+spec:
+  interval: 15s
+  # Keep in step with the policy's approvals.ttl.
+  approvalTTL: 15m
+  servicenow:
+    instanceURL: https://YOUR-INSTANCE.service-now.com
+    auth:
+      # OAuth client credentials (preferred), from the Secret kubeamber-servicenow.
+      type: oauth
+      clientIDFile: /etc/kubeamber/servicenow/client-id
+      clientSecretFile: /etc/kubeamber/servicenow/client-secret
+      # Or a dedicated integration user:
+      # type: basic
+      # usernameFile: /etc/kubeamber/servicenow/username
+      # passwordFile: /etc/kubeamber/servicenow/password
+    changeType: normal        # or emergency
+    window: 24h               # planned window from when the ticket opens
+    closeState: review        # or closed
+    fields:                   # set on every ticket
+      category: Software
+      # assignment_group: <sys_id of your platform team's group>
+    configurationItems:       # namespace glob -> cmdb_ci; the longest match wins
+      # "prod*": <sys_id of the production cluster CI>
+      # "*": <sys_id of the default cluster CI>

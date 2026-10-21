@@ -28,6 +28,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 	var o struct {
 		policy, addr, certFile, keyFile           string
 		namespace, serviceAccount, service        string
+		bridgeServiceAccount                      string
 		webhookConfig, admissionPolicy, tlsSecret string
 		reload                                    time.Duration
 	}
@@ -66,6 +67,13 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			selfUser := policy.ServiceAccountUsername(o.namespace + "/" + o.serviceAccount)
 			if a := p.MatchAgent(selfUser, nil); a != nil {
 				return fmt.Errorf("policy agent %q matches KubeAmber's own service account %s", a.Name, selfUser)
+			}
+			var bridgeUser string
+			if o.bridgeServiceAccount != "" {
+				bridgeUser = policy.ServiceAccountUsername(o.namespace + "/" + o.bridgeServiceAccount)
+				if a := p.MatchAgent(bridgeUser, nil); a != nil {
+					return fmt.Errorf("policy agent %q matches the bridge's service account %s", a.Name, bridgeUser)
+				}
 			}
 
 			var tlsCfg *tls.Config
@@ -106,7 +114,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			}
 			h := webhook.NewHandler(webhook.Handler{
 				Engine: engine, Store: &changerequest.Store{Client: dyn}, Policy: current.Get,
-				SelfUser: selfUser, Log: log,
+				SelfUser: selfUser, BridgeUser: bridgeUser, Log: log,
 			})
 
 			mux := http.NewServeMux()
@@ -135,6 +143,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 	f.StringVar(&o.namespace, "namespace", envOr("POD_NAMESPACE", "kubeamber-system"), "namespace KubeAmber runs in")
 	f.StringVar(&o.serviceAccount, "service-account", envOr("SERVICE_ACCOUNT", "kubeamber"), "KubeAmber's service account")
 	f.StringVar(&o.service, "service", "kubeamber", "webhook Service name")
+	f.StringVar(&o.bridgeServiceAccount, "bridge-service-account", "kubeamber-bridge", "service account of `kubeamber bridge`, allowed to record decisions from a change-management system (empty to disable)")
 	f.StringVar(&o.webhookConfig, "webhook-config", "kubeamber", "ValidatingWebhookConfiguration name")
 	f.StringVar(&o.admissionPolicy, "admission-policy", "kubeamber-protect-admission", "ValidatingAdmissionPolicy that blocks agents from changing admission webhooks (empty to skip)")
 	f.StringVar(&o.tlsSecret, "tls-secret", "kubeamber-webhook-tls", "Secret holding the self-managed certificate")
