@@ -94,6 +94,15 @@ func TestEvaluate(t *testing.T) {
 		{name: "self: CRD", change: risk.Change{Operation: "DELETE", Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition", Name: "changerequests.kubeamber.dev"}, want: policy.Deny, wantRule: SelfProtectionRule},
 		{name: "self: namespace object", change: risk.Change{Operation: "DELETE", Kind: "Namespace", Name: "kubeamber-system"}, want: policy.Deny, wantRule: SelfProtectionRule},
 		{name: "self: RBAC", change: risk.Change{Operation: "UPDATE", Group: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: "kubeamber-approver"}, want: policy.Deny, wantRule: SelfProtectionRule},
+		{name: "self: mint a token for KubeAmber's bridge", change: risk.Change{Operation: "CREATE", Kind: "ServiceAccount", Resource: "serviceaccounts", SubResource: "token", Namespace: "kubeamber-system", Name: "kubeamber-bridge"}, want: policy.Deny, wantRule: SelfProtectionRule},
+		{name: "mint a token elsewhere is held", change: risk.Change{Operation: "CREATE", Kind: "ServiceAccount", Resource: "serviceaccounts", SubResource: "token", Namespace: "shop", Name: "deployer"}, want: policy.Hold},
+		{name: "self: take over an agent identity", change: risk.Change{Operation: "UPDATE", Kind: "ServiceAccount", Namespace: "agents", Name: "claude-code-alice",
+			OldObject: map[string]any{"metadata": map[string]any{"annotations": map[string]any{OwnerAnnotation: "alice"}}},
+			Object:    map[string]any{"metadata": map[string]any{"annotations": map[string]any{OwnerAnnotation: "mallory"}}}}, want: policy.Deny, wantRule: SelfProtectionRule},
+		{name: "self: forge an agent identity", change: risk.Change{Operation: "CREATE", Kind: "ServiceAccount", Namespace: "agents", Name: "claude-code-bob",
+			Object: map[string]any{"metadata": map[string]any{"annotations": map[string]any{OwnerAnnotation: "bob"}}}}, want: policy.Deny, wantRule: SelfProtectionRule},
+		{name: "plain service account changes are scored", change: risk.Change{Operation: "UPDATE", Kind: "ServiceAccount", Namespace: "shop", Name: "web",
+			Object: map[string]any{"metadata": map[string]any{"labels": map[string]any{"x": "y"}}}}, want: policy.Allow},
 		{name: "self-protection beats allow rule", change: risk.Change{Operation: "DELETE", Kind: "Namespace", Name: "kubeamber-system"}, want: policy.Deny},
 	}
 	for _, c := range cases {

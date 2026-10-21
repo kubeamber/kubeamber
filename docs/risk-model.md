@@ -42,6 +42,7 @@ a Deployment, `pods/exec` is a Pod).
 | Node | +40 |
 | PersistentVolume, PersistentVolumeClaim | DELETE +45 (possible data loss); otherwise +10 |
 | Secret | +25 |
+| ServiceAccount token request (`serviceaccounts/token`) | +45 (whoever holds the token acts as that identity) |
 | NetworkPolicy | +20 (network isolation) |
 | Service, Ingress, Gateway, HTTPRoute, GRPCRoute | +10 (traffic routing) |
 | StatefulSet | +15 (stateful workload) |

@@ -16,6 +16,10 @@ rules:
     resources: [validatingwebhookconfigurations]
     resourceNames: [kubeamber]
     verbs: [get, update, patch]
+  # Read agents' service accounts to record who launched them (kubeamber.dev/owner).
+  - apiGroups: [""]
+    resources: [serviceaccounts]
+    verbs: [get]
   - apiGroups: [admissionregistration.k8s.io]
     resources: [validatingadmissionpolicies]
     resourceNames: [kubeamber-protect-admission]

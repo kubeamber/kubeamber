@@ -156,6 +156,7 @@ freezeWindows:
 |---|---|---|
 | `ttl` | `15m` | How long an approval stays usable. The agent must retry within this time. |
 | `pendingTTL` | `1h` | How long a held change waits for a decision. Also how long a rejection keeps blocking identical retries. A change linked to a ticket by `kubeamber bridge` waits until the ticket's planned window closes instead. |
+| `allowOwnerApproval` | `false` | Let the person who launched an agent (its `kubeamber.dev/owner`, set by `kubeamber agent-kubeconfig`) approve that agent's held changes. Leave it off unless your team is one person: approving your own agent's change is approving your own change. |
 | `requireExternal` | `false` | Approvals must come from the change-management system through `kubeamber bridge`. `kubeamber approve` is refused; `kubeamber reject` still works, because rejecting fails safe. See [ServiceNow](integrations.md#servicenow-change-management). |
 
 An approval recorded from a ticket is usable until the ticket's planned window

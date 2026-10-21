@@ -57,8 +57,11 @@ type ChangeRequest struct {
 }
 
 type Spec struct {
-	Agent     string   `json:"agent"`
-	User      string   `json:"user"`
+	Agent string `json:"agent"`
+	User  string `json:"user"`
+	// Owner is the person who launched the agent, from its service
+	// account's kubeamber.dev/owner annotation, if any.
+	Owner     string   `json:"owner,omitempty"`
 	Operation string   `json:"operation"`
 	Target    Target   `json:"target"`
 	Score     int      `json:"score"`

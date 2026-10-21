@@ -44,6 +44,7 @@ spec:
               properties:
                 agent: {type: string, description: Agent profile from the policy.}
                 user: {type: string, description: Kubernetes username that made the request.}
+                owner: {type: string, description: "Person who launched the agent (kubeamber.dev/owner on its service account)."}
                 operation: {type: string, enum: [CREATE, UPDATE, DELETE, CONNECT]}
                 target:
                   type: object
