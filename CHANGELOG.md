@@ -27,6 +27,13 @@ include breaking changes, which are called out.
 - `make docker-build-local`: small image from a host-compiled binary, used by
   the kind targets.
 
+### Fixed
+
+- An approved change could be held again when the API server retried the
+  write after a conflict, because the retry re-ran admission after the
+  approval had been used. The identical change is now allowed for 30 seconds
+  after its approval is used.
+
 ### v0.1.0: initial release
 
 - Validating admission webhook (`kubeamber webhook`) that reviews changes made by

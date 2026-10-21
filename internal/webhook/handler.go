@@ -48,6 +48,13 @@ const (
 // webhook's clock, so an approval cannot be post-dated to outlive its TTL.
 const maxClockSkew = 2 * time.Minute
 
+// replayWindow is how long after an approval is used the identical change is
+// still allowed. The API server re-runs admission when it retries a write
+// after a conflict (for example while a controller updates the object's
+// status), so one kubectl command can reach the webhook twice. Re-applying
+// an identical change has no further effect, so allowing it is safe.
+const replayWindow = 30 * time.Second
+
 // Store is the subset of changerequest.Store the handler uses.
 type Store interface {
 	FindByFingerprint(ctx context.Context, fp string) ([]*changerequest.ChangeRequest, error)
@@ -240,6 +247,12 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 			}
 			warn := fmt.Sprintf("kubeamber: ALLOW (approved by %s in %s): %s", a.By, where, a.Reason)
 			return &admissionv1.AdmissionResponse{Allowed: true, Warnings: []string{warn}}, cr.Name, "approved"
+		case changerequest.Consumed:
+			if c := cr.Status.ConsumedAt; c != nil && now.Sub(c.Time) >= 0 && now.Sub(c.Time) <= replayWindow {
+				a := cr.Spec.Approval
+				warn := fmt.Sprintf("kubeamber: ALLOW (approved by %s in change request %s; the API server retried the write)", a.By, cr.Name)
+				return &admissionv1.AdmissionResponse{Allowed: true, Warnings: []string{warn}}, cr.Name, "approved"
+			}
 		case changerequest.Pending:
 			switch {
 			case ext != nil:

@@ -104,7 +104,12 @@ list; the full value in `spec.fingerprint` is compared exactly.
   duplicate request is raised.
 - **Rejected:** retries are denied with the human's reason until
   `pendingTTL` after the decision; after that a retry raises a new request.
-- **Expired / Consumed:** ignored; a retry raises a new request.
+- **Expired:** ignored; a retry raises a new request.
+- **Consumed:** for 30 seconds the identical change is still allowed, because
+  the API server re-runs admission when it retries a write after a conflict
+  (for example while a controller updates the object's status). One kubectl
+  command can reach the webhook twice, and re-applying an identical change has
+  no further effect. After 30 seconds a retry raises a new request.
 - **One approval, one use.** Consumption is an update at the resource version
   KubeAmber read. If two retries race, one update succeeds. The other gets a
   conflict, moves on and is held again.

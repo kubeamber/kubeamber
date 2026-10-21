@@ -74,6 +74,10 @@ func (m *memStore) SetPhase(_ context.Context, cr *changerequest.ChangeRequest, 
 		return changerequest.ErrAlreadyUsed
 	}
 	stored.Status.Phase = phase
+	if phase == changerequest.Consumed {
+		t := metav1.NewTime(now)
+		stored.Status.ConsumedAt = &t
+	}
 	return nil
 }
 
@@ -192,7 +196,15 @@ func TestHoldApproveRetry(t *testing.T) {
 		t.Errorf("phase %s, annotations %v", f.store.crs["cr-1"].Status.Phase, resp.AuditAnnotations)
 	}
 
-	// 4. The approval cannot be reused.
+	// 4. The API server retrying the same write after a conflict is let
+	// through: the identical change was just approved and applied.
+	resp = f.h.Review(ctx, scaleToZero(agentUser))
+	if !resp.Allowed || !strings.Contains(resp.Warnings[0], "retried the write") || len(f.store.crs) != 1 {
+		t.Fatalf("API-server retry: allowed=%v crs=%d %v", resp.Allowed, len(f.store.crs), resp.Warnings)
+	}
+
+	// 5. After that, the approval cannot be reused.
+	f.now = f.now.Add(replayWindow + time.Second)
 	resp = f.h.Review(ctx, scaleToZero(agentUser))
 	if resp.Allowed || len(f.store.crs) != 2 {
 		t.Fatalf("approval was reused: allowed=%v crs=%d", resp.Allowed, len(f.store.crs))
