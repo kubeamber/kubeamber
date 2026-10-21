@@ -12,12 +12,21 @@ include breaking changes, which are called out.
 - A kagent walkthrough ([examples/kagent](examples/kagent/README.md)) with
   screenshots of a kagent agent's changes being allowed, held, approved and
   denied, plus a KubeAmber-aware kagent Agent.
+- Prometheus metrics on `/metrics` (port 9090, plain HTTP), on by default:
+  `kubeamber_decisions_total` by agent and outcome, the `kubeamber_risk_score`
+  histogram, and Go and process metrics. The chart adds scrape annotations and
+  can create a ServiceMonitor (`metrics.serviceMonitor.enabled`).
+  `--metrics-addr` changes the address, and an empty value turns it off.
 
 ### Fixed
 
 - The kagent integration guide matched `kagent/*`, which also reviewed the
   kagent controller. It now matches the tool server's service account,
   `kagent/kagent-tools`.
+- Setting only `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` also started a trace
+  exporter that sent to `localhost:4318` and failed. Traces and metrics now
+  start only when their own endpoint, or the shared one, is set, so metrics can
+  be pushed straight to Prometheus's OTLP receiver.
 
 ## [0.2.0] - 2026-10-21
 

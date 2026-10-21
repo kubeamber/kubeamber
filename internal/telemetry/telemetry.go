@@ -1,16 +1,22 @@
 // Package telemetry configures OpenTelemetry from the standard OTEL_*
-// environment variables. With no OTLP endpoint set, telemetry stays off.
+// environment variables, and can serve metrics for Prometheus to scrape.
+// Traces and OTLP metrics stay off unless an OTLP endpoint is set.
 package telemetry
 
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otelprometheus "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -19,20 +25,27 @@ import (
 
 // Enabled reports whether an OTLP endpoint is configured.
 func Enabled() bool {
-	for _, k := range []string{"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"} {
-		if os.Getenv(k) != "" {
-			return true
-		}
-	}
-	return false
+	return tracesEnabled() || metricsEnabled()
 }
 
-// Setup installs global trace and metric providers that export over OTLP/HTTP.
-// The returned function flushes and stops them.
-func Setup(ctx context.Context, version string) (func(context.Context) error, error) {
+func tracesEnabled() bool {
+	return os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT") != ""
+}
+
+func metricsEnabled() bool {
+	return os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" || os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT") != ""
+}
+
+// Setup installs global trace and metric providers. Traces and metrics are each
+// exported over OTLP/HTTP when their endpoint, or the shared one, is set, so
+// metrics can go straight to Prometheus's OTLP receiver. With scrape set,
+// metrics are also kept for Prometheus, and the returned handler serves them in
+// the Prometheus text format; otherwise the handler is nil. The returned
+// function flushes and stops the providers.
+func Setup(ctx context.Context, version string, scrape bool) (http.Handler, func(context.Context) error, error) {
 	otel.SetTextMapPropagator(propagation.TraceContext{})
-	if !Enabled() {
-		return func(context.Context) error { return nil }, nil
+	if !Enabled() && !scrape {
+		return nil, func(context.Context) error { return nil }, nil
 	}
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
@@ -43,21 +56,49 @@ func Setup(ctx context.Context, version string) (func(context.Context) error, er
 		resource.WithHost(),
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	traceExp, err := otlptracehttp.New(ctx)
-	if err != nil {
-		return nil, err
+
+	opts := []sdkmetric.Option{sdkmetric.WithResource(res)}
+	var stops []func(context.Context) error
+	var handler http.Handler
+	if scrape {
+		registry := prometheus.NewRegistry()
+		registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+		// Every KubeAmber metric comes from one instrumentation scope, so the
+		// otel_scope_* labels would only add noise.
+		promExp, err := otelprometheus.New(otelprometheus.WithRegisterer(registry), otelprometheus.WithoutScopeInfo())
+		if err != nil {
+			return nil, nil, err
+		}
+		opts = append(opts, sdkmetric.WithReader(promExp))
+		handler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{})
 	}
-	metricExp, err := otlpmetrichttp.New(ctx)
-	if err != nil {
-		return nil, err
+	if tracesEnabled() {
+		traceExp, err := otlptracehttp.New(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(traceExp), sdktrace.WithResource(res))
+		otel.SetTracerProvider(tp)
+		stops = append(stops, tp.Shutdown)
 	}
-	tp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(traceExp), sdktrace.WithResource(res))
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp)), sdkmetric.WithResource(res))
-	otel.SetTracerProvider(tp)
+	if metricsEnabled() {
+		metricExp, err := otlpmetrichttp.New(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		opts = append(opts, sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp)))
+	}
+	mp := sdkmetric.NewMeterProvider(opts...)
 	otel.SetMeterProvider(mp)
-	return func(ctx context.Context) error {
-		return errors.Join(tp.Shutdown(ctx), mp.Shutdown(ctx))
+	stops = append(stops, mp.Shutdown)
+
+	return handler, func(ctx context.Context) error {
+		var errs []error
+		for _, stop := range stops {
+			errs = append(errs, stop(ctx))
+		}
+		return errors.Join(errs...)
 	}, nil
 }

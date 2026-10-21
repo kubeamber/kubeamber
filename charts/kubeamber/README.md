@@ -25,6 +25,7 @@ node, so the chart does not offer a DaemonSet.
 | Resource | Name |
 |---|---|
 | Webhook Deployment, Service, PodDisruptionBudget | `kubeamber` |
+| ServiceMonitor (`metrics.serviceMonitor.enabled`) | `kubeamber` |
 | ValidatingWebhookConfiguration | `kubeamber` |
 | ValidatingAdmissionPolicy and binding (`admissionPolicy.enabled`) | `kubeamber-protect-admission` |
 | ChangeRequest CRD (`crds.install`), kept on uninstall | `changerequests.kubeamber.dev` |
@@ -46,6 +47,10 @@ node, so the chart does not offer a DaemonSet.
 | `webhook.tls.existingSecret` | `""` | Use this `kubernetes.io/tls` Secret instead of KubeAmber's self-managed certificate. |
 | `webhook.tls.certManagerCertificate` | `""` | With `existingSecret`: `namespace/certificate` for cert-manager's CA injection. |
 | `webhook.tls.caBundle` | `""` | With `existingSecret`: the CA (PEM), if not using cert-manager. |
+| `metrics.enabled` / `.port` | `true` / `9090` | Serve Prometheus metrics on `/metrics` over plain HTTP ([metrics](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#prometheus-and-grafana-alloy)). |
+| `metrics.scrapeAnnotations` | `true` | Add `prometheus.io/scrape`, `/port` and `/path` pod annotations. |
+| `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus Operator ServiceMonitor (needs its CRD). |
+| `metrics.serviceMonitor.interval` / `.labels` | `30s` / `{}` | Scrape interval, and labels your Prometheus selects ServiceMonitors by. |
 | `admissionPolicy.enabled` | `true` | Block agents from changing admission webhooks. |
 | `agentsNamespace.create` / `.name` | `true` / `kubeamber-agents` | |
 | `crds.install` | `true` | |
