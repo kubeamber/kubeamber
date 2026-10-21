@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      actions: {patterns: ["*"]}
+  - package-ecosystem: gomod
+    directory: /
+    schedule: {interval: weekly}
+    groups:
+      kubernetes: {patterns: ["k8s.io/*"]}
+      opentelemetry: {patterns: ["go.opentelemetry.io/*"]}
+  - package-ecosystem: docker
+    directory: /
+    schedule: {interval: weekly}
