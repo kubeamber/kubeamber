@@ -117,7 +117,15 @@ plays an agent with `cluster-admin` through 37 scenarios
 attempts to switch KubeAmber off, and a change approved through a simulated
 ServiceNow. RBAC allows every one of them; KubeAmber decides.
 
-To install on an existing cluster (Kubernetes 1.30+, for `matchConditions`):
+To install on an existing cluster (Kubernetes 1.30+, for `matchConditions`),
+use the [Helm chart](charts/kubeamber):
+
+```sh
+helm install kubeamber oci://ghcr.io/kubeamber/charts/kubeamber \
+  --namespace kubeamber-system --create-namespace
+```
+
+or the plain manifests:
 
 ```sh
 kubectl apply -k "https://github.com/kubeamber/kubeamber/deploy?ref=main"

@@ -2,6 +2,9 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   name: changerequests.kubeamber.dev
+  annotations:
+    # Helm keeps the CRD, and every held change, when the chart is uninstalled.
+    helm.sh/resource-policy: keep
 spec:
   group: kubeamber.dev
   scope: Cluster
@@ -44,6 +47,7 @@ spec:
               properties:
                 agent: {type: string, description: Agent profile from the policy.}
                 user: {type: string, description: Kubernetes username that made the request.}
+                owner: {type: string, description: "Person who launched the agent (kubeamber.dev/owner on its service account)."}
                 operation: {type: string, enum: [CREATE, UPDATE, DELETE, CONNECT]}
                 target:
                   type: object
