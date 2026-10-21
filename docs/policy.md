@@ -155,7 +155,11 @@ freezeWindows:
 | Field | Default | Description |
 |---|---|---|
 | `ttl` | `15m` | How long an approval stays usable. The agent must retry within this time. |
-| `pendingTTL` | `1h` | How long a held change waits for a decision. Also how long a rejection keeps blocking identical retries. |
+| `pendingTTL` | `1h` | How long a held change waits for a decision. Also how long a rejection keeps blocking identical retries. A change linked to a ticket by `kubeamber bridge` waits until the ticket's planned window closes instead. |
+| `requireExternal` | `false` | Approvals must come from the change-management system through `kubeamber bridge`. `kubeamber approve` is refused; `kubeamber reject` still works, because rejecting fails safe. See [ServiceNow](integrations.md#servicenow-change-management). |
+
+An approval recorded from a ticket is usable until the ticket's planned window
+closes, rather than for `ttl`, and only after the window opens.
 
 Durations use Go syntax (`90s`, `15m`, `2h`).
 

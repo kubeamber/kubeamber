@@ -7,6 +7,26 @@ include breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Added
+
+- `kubeamber bridge`: connects held changes to ServiceNow Change Management
+  ([proposal 0001](docs/proposals/0001-change-management.md)). It opens a
+  ticket for each held change, records the ServiceNow approver, honours the
+  ticket's planned window, and closes the ticket with an implementation note
+  or cancels it. Install with `kubectl apply -k deploy/servicenow-bridge`.
+- `approvals.requireExternal` policy option: only the change-management system
+  can approve; local rejections still work.
+- ChangeRequest API (additive): `spec.factors`, `spec.approval.source`,
+  `spec.approval.externalRef` and `status.external`, plus a `Ticket` printer
+  column. `kubeamber list` and the MCP `kubeamber_change_request` tool show the
+  ticket.
+- Webhook rules for the bridge identity (`--bridge-service-account`): one
+  immutable ticket link, and decisions only for that ticket.
+- `--as` global flag to impersonate a user, like `kubectl --as`.
+- Simulated ServiceNow (`hack/fakesnow`) and ten new end-to-end scenarios.
+- `make docker-build-local`: small image from a host-compiled binary, used by
+  the kind targets.
+
 ### v0.1.0: initial release
 
 - Validating admission webhook (`kubeamber webhook`) that reviews changes made by

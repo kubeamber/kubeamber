@@ -113,6 +113,17 @@ list; the full value in `spec.fingerprint` is compared exactly.
 `approvals.ttl`) rather than written by a controller; `kubeamber list` shows the
 effective phase.
 
+### Change-management tickets
+
+With `kubeamber bridge` installed, a Pending ChangeRequest is linked to a
+ticket in a change-management system (`status.external`), and the decision can
+come from there. The webhook still decides everything locally; the bridge
+syncs in the background, so ServiceNow latency never reaches the admission
+path. A linked request waits until the ticket's planned window closes, and an
+approval from the ticket is usable only inside that window. See
+[proposal 0001](proposals/0001-change-management.md) for the full protocol and
+the rules the webhook enforces on the bridge.
+
 ### Two-person rule
 
 The same webhook has a second entry, `changerequests.kubeamber.dev`, which
