@@ -20,6 +20,10 @@ Cluster-facing code is in `internal/`: `webhook` (admission handler, TLS,
 webhook configuration sync), `changerequest` (ChangeRequest store),
 `guards` (Prometheus), `mcpserver`, `manifest` and `telemetry`.
 
+## What runs in the cluster
+
+![What runs in the cluster: kube-apiserver sends agents' changes over HTTPS to the kubeamber Service in kubeamber-system, which spreads them over two webhook pods. The webhook reads the kubeamber-policy ConfigMap and its TLS Secret, keeps the webhook configuration in sync, and creates ChangeRequests that approvers decide. The optional bridge mirrors held changes to ServiceNow. Decisions go to an OpenTelemetry Collector, SLO guards query Prometheus, and each agent signs in as its own ServiceAccount in kubeamber-agents.](images/architecture-in-cluster.png)
+
 ## Request flow
 
 ```
@@ -66,6 +70,8 @@ Instead:
 
 Agents already retry when they are told to, and the denial message says when
 and how. The protocol needs no agent-side SDK.
+
+![The amber path: the agent scales a Deployment to zero; KubeAmber creates ChangeRequest cr-1a2b with risk 75 and answers HOLD. An approver approves it with the CLI or ServiceNow, the agent retries the identical change, KubeAmber matches the fingerprint, uses the approval once and answers ALLOW.](images/architecture-amber-path.png)
 
 ### Fingerprints
 

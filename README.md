@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="artwork/horizontal/color-dark/kubeamber-horizontal-color-dark.svg">
-    <img alt="KubeAmber" src="artwork/horizontal/color/kubeamber-horizontal-color.svg" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/kubeamber-logo-dark.svg">
+    <img alt="KubeAmber" src="docs/images/kubeamber-logo.svg" width="420">
   </picture>
 </h1>
 
@@ -26,6 +26,14 @@ Every verdict carries a reason the agent can read and act on.
 
 ## How it works
 
+![How KubeAmber works: AI agents' changes go through kube-apiserver to KubeAmber, which scores each one and gives it a light. Allow is applied at once, hold creates a ChangeRequest that a person approves before the agent retries, deny is refused with the reason. Humans and controllers are never sent to KubeAmber.](docs/images/architecture-overview.png)
+
+[docs/architecture.md](docs/architecture.md) shows what runs in the cluster
+and how a held change is approved.
+
+<details>
+<summary>The same flow as text</summary>
+
 ```
  AI agent (any framework)
    │  kubectl / client-go, as its own identity
@@ -43,6 +51,8 @@ Every verdict carries a reason the agent can read and act on.
    │           agent:  retries the identical change → allowed once
    └─ DENY   request denied with the reasons; agent is told not to retry
 ```
+
+</details>
 
 - **Agents only.** KubeAmber writes the webhook's `matchConditions` from the
   policy, so requests from people and controllers never reach it. This makes

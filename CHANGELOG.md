@@ -31,6 +31,12 @@ include breaking changes, which are called out.
   HMAC-SHA256. The notifier only reads ChangeRequests, keeps what it has sent
   in a ConfigMap, and is enabled with the chart's `notify.enabled` or
   `deploy/notify`.
+- Architecture diagrams in the README and `docs/architecture.md`.
+
+### Changed
+
+- The logo artwork kit and its generator are no longer kept in the repository;
+  the README logo and chart icon are in `docs/images/`.
 
 ### Fixed
 
