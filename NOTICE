@@ -4,3 +4,6 @@ Copyright The KubeAmber Authors.
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 It includes software developed by third parties under their own licenses; see
 go.mod for the list of dependencies.
+
+The diagrams in docs/images/architecture-*.png use the Kubernetes icon set by
+The Kubernetes Authors, licensed under CC BY 4.0.

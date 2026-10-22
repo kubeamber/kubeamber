@@ -11,7 +11,7 @@ kubeVersion: ">=1.30.0-0"
 home: https://github.com/kubeamber/kubeamber
 sources:
   - https://github.com/kubeamber/kubeamber
-icon: https://raw.githubusercontent.com/kubeamber/kubeamber/main/artwork/icon/color/kubeamber-icon-color.svg
+icon: https://raw.githubusercontent.com/kubeamber/kubeamber/main/docs/images/kubeamber-icon.svg
 keywords: [kubernetes, ai-agents, admission-webhook, policy, human-in-the-loop, mcp, change-management]
 maintainers:
   - name: Sathpal Singh

@@ -8,11 +8,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/events"
 
 	"github.com/kubeamber/kubeamber/internal/agentid"
 	"github.com/kubeamber/kubeamber/internal/changerequest"
@@ -27,10 +30,12 @@ import (
 
 func webhookCmd(kf *kube.Flags) *cobra.Command {
 	var o struct {
-		policy, addr, certFile, keyFile           string
+		policy, addr, metricsAddr                 string
+		certFile, keyFile                         string
 		namespace, serviceAccount, service        string
 		bridgeServiceAccount                      string
 		webhookConfig, admissionPolicy, tlsSecret string
+		events                                    string
 		reload, resync                            time.Duration
 	}
 	cmd := &cobra.Command{
@@ -41,7 +46,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 			slog.SetDefault(log)
 
-			shutdown, err := telemetry.Setup(ctx, version.Version)
+			metrics, shutdown, err := telemetry.Setup(ctx, version.Version, o.metricsAddr != "")
 			if err != nil {
 				return fmt.Errorf("telemetry: %w", err)
 			}
@@ -124,6 +129,18 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 				}
 			}()
 
+			eventOutcomes, err := webhook.ParseEventOutcomes(o.events)
+			if err != nil {
+				return fmt.Errorf("--events: %w", err)
+			}
+			var recorder events.EventRecorder
+			if len(eventOutcomes) > 0 {
+				broadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: cs.EventsV1()})
+				broadcaster.StartRecordingToSink(ctx.Done())
+				defer broadcaster.Shutdown()
+				recorder = broadcaster.NewRecorder(scheme.Scheme, "kubeamber.dev/webhook")
+			}
+
 			engine := &decide.Engine{
 				Policy: current.Get,
 				Guard:  guards.NewPrometheus(),
@@ -132,19 +149,36 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			h := webhook.NewHandler(webhook.Handler{
 				Engine: engine, Store: &changerequest.Store{Client: dyn}, Policy: current.Get,
 				SelfUser: selfUser, BridgeUser: bridgeUser, Owners: &agentid.Owners{Client: cs}, Log: log,
+				Events: recorder, EventOutcomes: eventOutcomes,
 			})
 
 			mux := http.NewServeMux()
 			mux.Handle("/validate", h)
 			mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 			srv := &http.Server{Addr: o.addr, Handler: mux, TLSConfig: tlsCfg, ReadHeaderTimeout: 10 * time.Second}
+			var metricsSrv *http.Server
+			if metrics != nil {
+				metricsMux := http.NewServeMux()
+				metricsMux.Handle("/metrics", metrics)
+				metricsSrv = &http.Server{Addr: o.metricsAddr, Handler: metricsMux, ReadHeaderTimeout: 10 * time.Second}
+				go func() {
+					// Metrics are best effort: a problem serving them must not stop
+					// admission reviews.
+					if err := metricsSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+						log.Error("serving metrics", "addr", o.metricsAddr, "error", err)
+					}
+				}()
+			}
 			go func() {
 				<-ctx.Done()
 				sctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 				_ = srv.Shutdown(sctx)
+				if metricsSrv != nil {
+					_ = metricsSrv.Shutdown(sctx)
+				}
 			}()
-			log.Info("kubeamber webhook listening", "addr", o.addr, "version", version.Version,
+			log.Info("kubeamber webhook listening", "addr", o.addr, "metrics", o.metricsAddr, "version", version.Version,
 				"policy", p.Metadata.Name, "agents", len(p.Spec.Agents), "telemetry", telemetry.Enabled())
 			if err := srv.ListenAndServeTLS("", ""); !errors.Is(err, http.ErrServerClosed) {
 				return err
@@ -155,6 +189,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&o.policy, "policy", "/etc/kubeamber/policy.yaml", "policy file")
 	f.StringVar(&o.addr, "addr", ":9443", "HTTPS listen address")
+	f.StringVar(&o.metricsAddr, "metrics-addr", ":9090", "address to serve Prometheus metrics on /metrics, over plain HTTP (empty to disable)")
 	f.StringVar(&o.certFile, "tls-cert-file", "", "serving certificate (default: self-managed in a Secret)")
 	f.StringVar(&o.keyFile, "tls-key-file", "", "serving key")
 	f.StringVar(&o.namespace, "namespace", envOr("POD_NAMESPACE", "kubeamber-system"), "namespace KubeAmber runs in")
@@ -164,6 +199,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 	f.StringVar(&o.webhookConfig, "webhook-config", "kubeamber", "ValidatingWebhookConfiguration name")
 	f.StringVar(&o.admissionPolicy, "admission-policy", "kubeamber-protect-admission", "ValidatingAdmissionPolicy that blocks agents from changing admission webhooks (empty to skip)")
 	f.StringVar(&o.tlsSecret, "tls-secret", "kubeamber-webhook-tls", "Secret holding the self-managed certificate")
+	f.StringVar(&o.events, "events", strings.Join(webhook.EventOutcomes, ","), "decisions to record as Kubernetes Events on the changed object: a comma-separated list of allow, hold, deny, approved, rejected, or all, or none")
 	f.DurationVar(&o.reload, "reload-interval", 5*time.Second, "how often to check the policy file for changes")
 	f.DurationVar(&o.resync, "resync-interval", 30*time.Second, "how often to re-apply the webhook configuration (CA bundle and agent match condition)")
 	return cmd

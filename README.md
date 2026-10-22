@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="artwork/horizontal/color-dark/kubeamber-horizontal-color-dark.svg">
-    <img alt="KubeAmber" src="artwork/horizontal/color/kubeamber-horizontal-color.svg" width="420">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/kubeamber-logo-dark.svg">
+    <img alt="KubeAmber" src="docs/images/kubeamber-logo.svg" width="420">
   </picture>
 </h1>
 
@@ -26,6 +26,11 @@ Every verdict carries a reason the agent can read and act on.
 
 ## How it works
 
+![How KubeAmber works: AI agents' changes go through kube-apiserver to KubeAmber, which scores each one and gives it a light. Allow is applied at once, hold creates a ChangeRequest that a person approves before the agent retries, deny is refused with the reason. Humans and controllers are never sent to KubeAmber.](docs/images/architecture-overview.png)
+
+<details>
+<summary>The same flow as text</summary>
+
 ```
  AI agent (any framework)
    │  kubectl / client-go, as its own identity
@@ -44,6 +49,8 @@ Every verdict carries a reason the agent can read and act on.
    └─ DENY   request denied with the reasons; agent is told not to retry
 ```
 
+</details>
+
 - **Agents only.** KubeAmber writes the webhook's `matchConditions` from the
   policy, so requests from people and controllers never reach it. This makes
   `failurePolicy: Fail` safe: if KubeAmber is down, only agents are blocked.
@@ -61,8 +68,25 @@ Every verdict carries a reason the agent can read and act on.
   ServiceNow change requests. Your CAB approves there; the agent applies
   exactly that change in the approved window, and the ticket is closed with
   evidence. See [integrations](docs/integrations.md#servicenow-change-management).
+- **Tells people.** `kubeamber notify` posts to Slack, Microsoft Teams or any
+  webhook when a change is held, with the risk and the command to approve it,
+  and again when it is approved, rejected, applied or expires. See
+  [integrations](docs/integrations.md#notifications-in-slack-teams-or-any-webhook).
 - **Traceable.** Decisions are OpenTelemetry spans linked to the agent's own
   trace. They also appear in the Kubernetes audit log.
+
+### The amber path
+
+When a change is held, one approval lets through exactly that change, once.
+
+![The amber path: the agent scales a Deployment to zero; KubeAmber creates ChangeRequest cr-1a2b with risk 75 and answers HOLD. An approver approves it with the CLI or ServiceNow, the agent retries the identical change, KubeAmber matches the fingerprint, uses the approval once and answers ALLOW.](docs/images/architecture-amber-path.png)
+
+### What runs in the cluster
+
+Everything `helm install kubeamber` puts in the cluster, and how the parts talk
+to each other. [docs/architecture.md](docs/architecture.md) has the details.
+
+![What runs in the cluster: kube-apiserver sends agents' changes over HTTPS to the kubeamber Service in kubeamber-system, which spreads them over two webhook pods. The webhook reads the kubeamber-policy ConfigMap and its TLS Secret, keeps the webhook configuration in sync, and creates ChangeRequests that approvers decide. The optional bridge mirrors held changes to ServiceNow. Decisions go to an OpenTelemetry Collector, SLO guards query Prometheus, and each agent signs in as its own ServiceAccount in kubeamber-agents.](docs/images/architecture-in-cluster.png)
 
 ## What an agent sees
 
@@ -161,6 +185,9 @@ agents:
     serviceAccounts: ["holmesgpt/holmesgpt-holmes-service-account"]
 ```
 
+See it end to end in the [kagent walkthrough](examples/kagent/README.md): a
+kagent agent's changes allowed, held for approval and denied, with screenshots.
+
 **Workstation agents** (Claude Code, Codex, kubectl-ai, Cursor): never hand an
 agent your own kubeconfig, because KubeAmber would see you, not the agent. Give
 it a short-lived identity of its own instead:
@@ -207,6 +234,32 @@ metadata:
 ```
 
 More in [docs/integrations.md](docs/integrations.md).
+
+## Vendor-neutral by design
+
+KubeAmber judges what an agent does to your cluster, not who built the agent.
+
+- **It scores the change, not the agent.** The scorer's only inputs are the
+  identity, the operation, the resource and the object before and after. No
+  prompt, model name, vendor SDK or tool name reaches it. A merge patch, a
+  `kubectl apply` and a `kubectl scale` that produce the same change get the
+  same score, so an agent that switches tools gets the same answer (see the
+  [kagent walkthrough](examples/kagent/README.md)).
+- **It recognises agents by their Kubernetes identity.** Every platform already
+  maps its identities to Kubernetes users, groups and service accounts: Entra
+  ID on AKS, IAM access entries on EKS, Google accounts on GKE, service
+  accounts for in-cluster agents. Adding an agent from any vendor is one line
+  of policy, with no plugin.
+- **There is no LLM in the decision.** The score is arithmetic over a published
+  table ([risk model](docs/risk-model.md)). The same change under the same
+  policy always gets the same score, a prompt-injected agent has nothing to
+  persuade, and nothing leaves the cluster.
+- **It sits where every agent has to pass.** Approval gates inside an agent
+  framework cover that framework only, and trust the agent's description of
+  what it is about to do. KubeAmber reads the actual request at the API server.
+- **It is built only from Kubernetes parts:** an admission webhook, CEL match
+  conditions, a CRD, RBAC, audit annotations and OpenTelemetry. It runs on any
+  conformant cluster.
 
 ## How it compares
 

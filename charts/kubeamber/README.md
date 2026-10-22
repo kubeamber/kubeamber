@@ -25,6 +25,7 @@ node, so the chart does not offer a DaemonSet.
 | Resource | Name |
 |---|---|
 | Webhook Deployment, Service, PodDisruptionBudget | `kubeamber` |
+| ServiceMonitor (`metrics.serviceMonitor.enabled`) | `kubeamber` |
 | ValidatingWebhookConfiguration | `kubeamber` |
 | ValidatingAdmissionPolicy and binding (`admissionPolicy.enabled`) | `kubeamber-protect-admission` |
 | ChangeRequest CRD (`crds.install`), kept on uninstall | `changerequests.kubeamber.dev` |
@@ -32,6 +33,7 @@ node, so the chart does not offer a DaemonSet.
 | ClusterRoles for approvers and viewers | `kubeamber-approver`, `kubeamber-viewer` |
 | Agents namespace (`agentsNamespace.create`), kept on uninstall | `kubeamber-agents` |
 | ServiceNow bridge (`bridge.enabled`) | `kubeamber-bridge` |
+| Notifier (`notify.enabled`) | `kubeamber-notify` |
 
 ## Values
 
@@ -43,9 +45,14 @@ node, so the chart does not offer a DaemonSet.
 | `webhook.failurePolicy` | `Fail` | Fail closed: agents wait while KubeAmber is down. Humans and controllers never reach the webhook. |
 | `webhook.timeoutSeconds` | `5` | |
 | `webhook.env` | `[]` | Extra environment, e.g. `OTEL_EXPORTER_OTLP_ENDPOINT`. |
+| `webhook.events` | `hold,deny,approved,rejected` | Decisions recorded as Kubernetes Events on the changed objects; `all` adds allows, empty turns Events off. |
 | `webhook.tls.existingSecret` | `""` | Use this `kubernetes.io/tls` Secret instead of KubeAmber's self-managed certificate. |
 | `webhook.tls.certManagerCertificate` | `""` | With `existingSecret`: `namespace/certificate` for cert-manager's CA injection. |
 | `webhook.tls.caBundle` | `""` | With `existingSecret`: the CA (PEM), if not using cert-manager. |
+| `metrics.enabled` / `.port` | `true` / `9090` | Serve Prometheus metrics on `/metrics` over plain HTTP ([metrics](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#prometheus-and-grafana-alloy)). |
+| `metrics.scrapeAnnotations` | `true` | Add `prometheus.io/scrape`, `/port` and `/path` pod annotations. |
+| `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus Operator ServiceMonitor (needs its CRD). |
+| `metrics.serviceMonitor.interval` / `.labels` | `30s` / `{}` | Scrape interval, and labels your Prometheus selects ServiceMonitors by. |
 | `admissionPolicy.enabled` | `true` | Block agents from changing admission webhooks. |
 | `agentsNamespace.create` / `.name` | `true` / `kubeamber-agents` | |
 | `crds.install` | `true` | |
@@ -53,6 +60,9 @@ node, so the chart does not offer a DaemonSet.
 | `bridge.enabled` | `false` | Run the ServiceNow change-management bridge. |
 | `bridge.credentialsSecret` | `kubeamber-servicenow` | Secret with `client-id`/`client-secret` or `username`/`password`. |
 | `bridge.config` | see `values.yaml` | The bridge configuration ([guide](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#servicenow-change-management)). |
+| `notify.enabled` | `false` | Run `kubeamber notify`: Slack, Teams or webhook messages about held changes and their outcomes. |
+| `notify.secretName` | `kubeamber-notify` | Secret with the webhook URLs, mounted at `/etc/kubeamber/notify-secrets`. |
+| `notify.config` | see `values.yaml` | Channels and routes ([guide](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#notifications-in-slack-teams-or-any-webhook)). |
 
 Every key is documented in [`values.yaml`](values.yaml).
 

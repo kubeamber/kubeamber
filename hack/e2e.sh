@@ -49,6 +49,19 @@ refute() {
   fi
 }
 
+# decision_events NAMESPACE REASON TEXT: KubeAmber's Events with that reason,
+# once one of them mentions TEXT (Events are written asynchronously).
+decision_events() {
+  local out=""
+  for _ in $(seq 1 20); do
+    out=$(k -n "$1" get events --field-selector "reason=$2" \
+      -o jsonpath='{range .items[*]}{.reason} {.involvedObject.kind}/{.involvedObject.name} {.message}{"\n"}{end}')
+    grep -qF -- "$3" <<<"$out" && break
+    sleep 1
+  done
+  printf '%s\n' "$out"
+}
+
 step "Setup: shop and prod namespaces, a checkout service in each, an agent with cluster-admin"
 for ns in shop prod; do
   k create namespace "$ns" --dry-run=client -o yaml | k apply -f - >/dev/null
@@ -111,6 +124,8 @@ CR=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
 check "retrying before approval raises no duplicate" blocked "$CR is still waiting for a human" -- \
   agent -n prod scale deploy/checkout --replicas=0
 check "kubeamber list shows it" allowed "$CR +Pending +sre-agent +UPDATE Deployment prod/checkout +75" -- tp list
+check "the hold is an Event on prod/checkout, with the approve command" allowed \
+  "AgentChangeHeld Deployment/checkout .*kubeamber approve $CR" -- decision_events prod AgentChangeHeld "$CR"
 
 step "4. Nobody can approve a change on someone else's behalf"
 check "the agent approves its own change request" blocked "agents cannot" -- \
@@ -128,6 +143,8 @@ check "agent retries and is allowed" allowed "kubeamber: ALLOW \(approved by .* 
   agent -n prod scale deploy/checkout --replicas=0
 check "prod/checkout is at 0 replicas" allowed "^0$" -- k -n prod get deploy checkout -o jsonpath='{.spec.replicas}'
 check "the approval is used up" allowed "Consumed" -- k get changerequest "$CR"
+check "  ...and the approved retry is an Event too" allowed "AgentChangeApproved Deployment/checkout .*$CR was approved" -- \
+  decision_events prod AgentChangeApproved "$CR"
 k -n prod scale deploy/checkout --replicas=3 >/dev/null
 
 step "6. Rejections stick"
@@ -135,11 +152,16 @@ check "agent deletes prod/checkout" blocked "kubeamber: HOLD \(risk 60/100, remo
 CR2=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
 check "operator rejects" allowed "rejected $CR2" -- tp reject "$CR2" --reason "roll back the image instead"
 check "the agent's retry is refused with the reason" blocked "roll back the image instead" -- agent -n prod delete deploy checkout
+check "  ...and the refusal is an Event" allowed "AgentChangeRejected Deployment/checkout .*rejected change request $CR2" -- \
+  decision_events prod AgentChangeRejected "$CR2"
 
 step "7. Dangerous changes are denied outright"
 check "agent deletes namespace prod" blocked "kubeamber: DENY .*everything in it" -- agent delete namespace prod --dry-run=server
 check "agent grants itself cluster-admin" blocked "may not change RBAC" -- \
   agent apply -f examples/manifests/escalate-privileges.yaml
+check "  ...the denial of a cluster-scoped object is an Event in default" allowed \
+  "AgentChangeDenied ClusterRoleBinding/sre-agent-is-admin .*may not change RBAC" -- \
+  decision_events default AgentChangeDenied "sre-agent-is-admin"
 NODE=$(k get nodes -o jsonpath='{.items[0].metadata.name}')
 check "agent reaches a node's kubelet through the API server" blocked "kubeamber: DENY \(risk 85/100\).*kubelet" -- \
   agent get --raw "/api/v1/nodes/$NODE/proxy/healthz"
@@ -249,6 +271,77 @@ check "revoking the identity removes its access at once" allowed "access is remo
 check "  ...so the agent can do nothing" blocked "[Ff]orbidden|Unauthorized" -- claude_kubectl -n shop get pods
 wait_for 30 sh -c "kubectl --kubeconfig $WORK/claude.kubeconfig -n shop get pods 2>&1 | grep -q Unauthorized"
 check "  ...and within seconds its token is rejected outright" blocked "Unauthorized" -- claude_kubectl -n shop get pods
+
+step "11. Prometheus can scrape KubeAmber's decisions"
+# Each replica counts the requests it reviewed, so read every replica (one that
+# is shutting down may not answer).
+scrape_all() {
+  local pod
+  for pod in $(k -n kubeamber-system get pods -l app.kubernetes.io/name=kubeamber -o name); do
+    k get --raw "/api/v1/namespaces/kubeamber-system/pods/${pod#pod/}:9090/proxy/metrics" || true
+  done
+}
+check "decisions are counted by agent and outcome" allowed \
+  'kubeamber_decisions_total\{[^}]*gen_ai_agent_name="sre-agent"[^}]*kubeamber_outcome="hold"' -- scrape_all
+check "  ...denials too" allowed 'kubeamber_decisions_total\{[^}]*kubeamber_outcome="deny"' -- scrape_all
+check "risk scores are recorded as a histogram" allowed 'kubeamber_risk_score_bucket\{[^}]*le="30"' -- scrape_all
+
+step "12. People hear about held changes in Slack, Teams or a webhook (simulated)"
+HOOK_ADDR=${HOOK_ADDR:-127.0.0.1:18081}
+printf 'http://%s/slack' "$HOOK_ADDR" >"$WORK/slack-url"
+printf 'http://%s/teams' "$HOOK_ADDR" >"$WORK/teams-url"
+printf 'http://%s/hook' "$HOOK_ADDR" >"$WORK/hook-url"
+printf 'e2e-signing-key' >"$WORK/hook-key"
+k -n kubeamber-system get configmap kubeamber-policy -o jsonpath='{.data.policy\.yaml}' >"$WORK/policy.yaml"
+cat >"$WORK/notify.yaml" <<YAML
+apiVersion: kubeamber.dev/v1alpha1
+kind: NotifyConfig
+spec:
+  cluster: kind-e2e
+  interval: 1s
+  remindAfter: 0s
+  channels:
+    - {name: platform, slack: {urlFile: $WORK/slack-url}}
+    - {name: oncall, teams: {urlFile: $WORK/teams-url}}
+    - {name: audit, webhook: {urlFile: $WORK/hook-url, secretFile: $WORK/hook-key}}
+  routes:
+    - channels: [platform, audit]
+    - channels: [oncall]
+      events: [held]
+      namespaces: [prod]
+YAML
+go build -o bin/fakehook ./hack/fakehook
+bin/fakehook --addr "$HOOK_ADDR" --secret e2e-signing-key >"$WORK/fakehook.log" 2>&1 &
+HOOK_PID=$!
+k apply -f deploy/notify/rbac.yaml >/dev/null
+"$KUBEAMBER" notify --context "$CONTEXT" --as system:serviceaccount:kubeamber-system:kubeamber-notify \
+  --config "$WORK/notify.yaml" --policy "$WORK/policy.yaml" --namespace kubeamber-system >"$WORK/notify.log" 2>&1 &
+NOTIFY_PID=$!
+trap 'kill $SNOW_PID $BRIDGE_PID $HOOK_PID $NOTIFY_PID 2>/dev/null || true' EXIT
+
+# received PATH TEXT: what the fake receiver got on PATH, once some of it mentions TEXT.
+received() {
+  wait_for 30 sh -c "curl -sf 'http://$HOOK_ADDR/received?path=$1' | grep -qF -- '$2'" || true
+  curl -sf "http://$HOOK_ADDR/received?path=$1"
+}
+
+check "agent scales prod/checkout from 3 to 2" blocked "kubeamber: HOLD \(risk 40/100, replicas 3 → 2\)" -- \
+  agent -n prod scale deploy/checkout --replicas=2
+CR5=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
+check "Slack is told it needs approval, with the command" allowed \
+  "\[kind-e2e\] Approval needed: UPDATE Deployment prod/checkout by agent sre-agent \(risk 40/100\).*kubeamber approve $CR5" -- \
+  received /slack "$CR5"
+check "on-call's Teams channel gets an Adaptive Card" allowed "kubeamber approve $CR5.*\"type\":\"AdaptiveCard\"" -- received /teams "$CR5"
+check "the webhook gets signed JSON" allowed "\"event\":\"held\",\"signature\":\"valid\".*\"changeRequest\":\"$CR5\"" -- \
+  received /hook "$CR5"
+check "operator approves" allowed "approved $CR5" -- tp approve "$CR5" --reason "planned"
+check "  ...and Slack hears who approved it" allowed "Approved: UPDATE Deployment prod/checkout by agent sre-agent.*By: kubernetes-admin" -- \
+  received /slack "Approved: UPDATE"
+check "the agent's retry is applied" allowed "kubeamber: ALLOW \(approved by" -- agent -n prod scale deploy/checkout --replicas=2
+check "  ...and Slack hears it was applied" allowed "Applied: UPDATE Deployment prod/checkout by agent sre-agent" -- \
+  received /slack "Applied: UPDATE"
+check "on-call only got the hold, as routed" allowed '^1$' -- sh -c "curl -sf 'http://$HOOK_ADDR/received?path=/teams' | grep -c '$CR5'"
+k -n prod scale deploy/checkout --replicas=3 >/dev/null
 
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]

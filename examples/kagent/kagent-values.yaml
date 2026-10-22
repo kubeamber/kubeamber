@@ -1,0 +1,22 @@
+# kagent v0.10.3 with only its Kubernetes agent, to keep the example small.
+# The OpenAI key comes from the kagent-openai Secret (see README.md).
+providers:
+  default: openAI
+  openAI:
+    model: gpt-4.1-mini
+    apiKeySecretRef: kagent-openai
+    apiKeySecretKey: OPENAI_API_KEY
+
+k8s-agent:
+  enabled: true
+
+kgateway-agent: {enabled: false}
+istio-agent: {enabled: false}
+promql-agent: {enabled: false}
+observability-agent: {enabled: false}
+argo-rollouts-agent: {enabled: false}
+helm-agent: {enabled: false}
+cilium-policy-agent: {enabled: false}
+cilium-manager-agent: {enabled: false}
+cilium-debug-agent: {enabled: false}
+grafana-mcp: {enabled: false}

@@ -20,6 +20,10 @@ Cluster-facing code is in `internal/`: `webhook` (admission handler, TLS,
 webhook configuration sync), `changerequest` (ChangeRequest store),
 `guards` (Prometheus), `mcpserver`, `manifest` and `telemetry`.
 
+## What runs in the cluster
+
+![What runs in the cluster: kube-apiserver sends agents' changes over HTTPS to the kubeamber Service in kubeamber-system, which spreads them over two webhook pods. The webhook reads the kubeamber-policy ConfigMap and its TLS Secret, keeps the webhook configuration in sync, and creates ChangeRequests that approvers decide. The optional bridge mirrors held changes to ServiceNow. Decisions go to an OpenTelemetry Collector, SLO guards query Prometheus, and each agent signs in as its own ServiceAccount in kubeamber-agents.](images/architecture-in-cluster.png)
+
 ## Request flow
 
 ```
@@ -66,6 +70,8 @@ Instead:
 
 Agents already retry when they are told to, and the denial message says when
 and how. The protocol needs no agent-side SDK.
+
+![The amber path: the agent scales a Deployment to zero; KubeAmber creates ChangeRequest cr-1a2b with risk 75 and answers HOLD. An approver approves it with the CLI or ServiceNow, the agent retries the identical change, KubeAmber matches the fingerprint, uses the approval once and answers ALLOW.](images/architecture-amber-path.png)
 
 ### Fingerprints
 
@@ -128,6 +134,17 @@ path. A linked request waits until the ticket's planned window closes, and an
 approval from the ticket is usable only inside that window. See
 [proposal 0001](proposals/0001-change-management.md) for the full protocol and
 the rules the webhook enforces on the bridge.
+
+### Notifications
+
+`kubeamber notify` watches ChangeRequests and posts to Slack, Microsoft Teams
+or a generic webhook as each one is held, still waiting, approved, rejected,
+applied or expired. It only reads ChangeRequests, so it needs no trust from
+the webhook, and it is never in the admission path. It reads the policy file
+for `approvals.ttl`, so "expired" means the same thing as in the webhook, and
+it records what it has sent in the `kubeamber-notify-state` ConfigMap, so a
+restart repeats nothing. Delivery is at least once per channel. Run one
+replica: two would send everything twice.
 
 ### Two-person rule
 
@@ -255,8 +272,11 @@ condition.
 ## Telemetry
 
 Telemetry uses OpenTelemetry and the standard `OTEL_*` environment variables.
-Nothing is exported unless `OTEL_EXPORTER_OTLP_ENDPOINT` (or the traces or
-metrics variant) is set; export is OTLP/HTTP.
+Each replica serves its metrics for Prometheus on `:9090/metrics`, over plain
+HTTP (`--metrics-addr`; empty turns it off). Traces and metrics are pushed over
+OTLP/HTTP only when `OTEL_EXPORTER_OTLP_ENDPOINT`, or the traces or metrics
+variant, is set; each signal starts only when its own endpoint or the shared one
+is configured.
 
 - **Span** `kubeamber.review` per agent request, with attributes
   `gen_ai.agent.name`, `kubeamber.outcome`, `kubeamber.verdict`,
@@ -266,12 +286,19 @@ metrics variant) is set; export is OTLP/HTTP.
   `kubeamber.dev/traceparent`, the span links to that span context.
 - **Metrics**: `kubeamber.decisions` (counter, by `gen_ai.agent.name` and
   `kubeamber.outcome` = allow / hold / deny / approved / rejected) and
-  `kubeamber.risk.score` (histogram, buckets every 10 points).
+  `kubeamber.risk.score` (histogram, buckets every 10 points). Prometheus sees
+  them as `kubeamber_decisions_total` and `kubeamber_risk_score`
+  ([integrations](integrations.md#prometheus-and-grafana-alloy)).
 - **Audit log**: admission responses carry audit annotations, which the API
   server records as `agents.kubeamber.dev/verdict`, `agents.kubeamber.dev/score`,
   `agents.kubeamber.dev/agent` and `agents.kubeamber.dev/change-request`.
 - **Logs**: one structured JSON line per decision on stdout, including the
   agent's stated intent.
+- **Kubernetes Events**: holds, denials, approved retries and rejections are
+  recorded as Events (events.k8s.io) on the changed object, with the
+  ChangeRequest as the related object (`--events`;
+  [integrations](integrations.md#kubernetes-events)). Recording is
+  asynchronous and never delays or changes a decision; dry runs record nothing.
 
 ## Failure modes
 

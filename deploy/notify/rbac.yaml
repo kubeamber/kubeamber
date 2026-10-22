@@ -1,0 +1,57 @@
+# `kubeamber notify` only reads ChangeRequests; it never changes them.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeamber-notify
+  namespace: kubeamber-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-notify
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeamber-notify
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeamber-notify
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber-notify
+    namespace: kubeamber-system
+---
+# It records what it has sent in one ConfigMap in its own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeamber-notify
+  namespace: kubeamber-system
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [kubeamber-notify-state]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeamber-notify
+  namespace: kubeamber-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeamber-notify
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber-notify
+    namespace: kubeamber-system

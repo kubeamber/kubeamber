@@ -7,6 +7,47 @@ include breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Added
+
+- A kagent walkthrough ([examples/kagent](examples/kagent/README.md)) with
+  screenshots of a kagent agent's changes being allowed, held, approved and
+  denied, plus a KubeAmber-aware kagent Agent.
+- Prometheus metrics on `/metrics` (port 9090, plain HTTP), on by default:
+  `kubeamber_decisions_total` by agent and outcome, the `kubeamber_risk_score`
+  histogram, and Go and process metrics. The chart adds scrape annotations and
+  can create a ServiceMonitor (`metrics.serviceMonitor.enabled`).
+  `--metrics-addr` changes the address, and an empty value turns it off.
+- Decisions are recorded as Kubernetes Events on the object the agent tried to
+  change, so they show up in `kubectl get events` and `kubectl describe`:
+  `AgentChangeHeld` (with the approve and reject commands),
+  `AgentChangeDenied`, `AgentChangeApproved` and `AgentChangeRejected`, and
+  optionally `AgentChangeAllowed`. Choose them with `--events` or the chart's
+  `webhook.events`. The webhook's ClusterRole can now create Events.
+- `kubeamber notify`: messages in Slack, Microsoft Teams or any webhook when
+  an agent's change is held, a reminder if nobody decides, and again when it
+  is approved, rejected, applied or expires. Messages give the risk, the
+  factors and the commands to approve or reject. Routes send messages by
+  event, risk, agent and namespace. Generic webhooks can be signed with
+  HMAC-SHA256. The notifier only reads ChangeRequests, keeps what it has sent
+  in a ConfigMap, and is enabled with the chart's `notify.enabled` or
+  `deploy/notify`.
+- Architecture diagrams in the README and `docs/architecture.md`.
+
+### Changed
+
+- The logo artwork kit and its generator are no longer kept in the repository;
+  the README logo and chart icon are in `docs/images/`.
+
+### Fixed
+
+- The kagent integration guide matched `kagent/*`, which also reviewed the
+  kagent controller. It now matches the tool server's service account,
+  `kagent/kagent-tools`.
+- Setting only `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` also started a trace
+  exporter that sent to `localhost:4318` and failed. Traces and metrics now
+  start only when their own endpoint, or the shared one, is set, so metrics can
+  be pushed straight to Prometheus's OTLP receiver.
+
 ### Security
 
 - Agents' subresource requests now reach KubeAmber. Before, an agent could add
