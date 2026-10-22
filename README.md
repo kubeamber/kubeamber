@@ -60,8 +60,8 @@ Every verdict carries a reason the agent can read and act on.
 - **Two-person rule.** Agents cannot create, approve or delete change requests.
   The identity that asked for a change cannot approve it, and an approval is
   good for exactly one retry of exactly that change.
-- **Self-protection.** Agents cannot modify KubeAmber's namespace, CRD, RBAC or
-  change requests, whatever the policy says. A ValidatingAdmissionPolicy stops
+- **Self-protection.** Agents cannot modify KubeAmber's namespace, CRD, API
+  service, RBAC or change requests, whatever the policy says. A ValidatingAdmissionPolicy stops
   them changing admission webhooks, which Kubernetes never sends to webhooks.
   See the [threat model](docs/threat-model.md) for the limits.
 - **Fits your change process.** `kubeamber bridge` turns held changes into

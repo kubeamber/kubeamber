@@ -39,6 +39,7 @@ a Deployment, `pods/exec` is a Pod).
 | ClusterRole, ClusterRoleBinding | +45 (cluster-wide permissions; possible privilege escalation) |
 | Role, RoleBinding | +35 (namespace permissions; possible privilege escalation) |
 | Validating/MutatingWebhookConfiguration, Validating/MutatingAdmissionPolicy (and bindings) | +50 (can switch off cluster safety checks). The API server never sends these objects to webhooks, so this factor appears only in `kubeamber check` and MCP previews; in the cluster, `kubeamber-protect-admission` denies agents outright. |
+| APIService | +50 (changes which server answers an API group, which can feed the cluster false data, such as metrics that drive autoscaling). Agents are denied outright for the `kubeamber.dev` group (self-protection). |
 | Node | +40; for CONNECT to `nodes/proxy`, +40 because the kubelet can run commands in any pod on the node |
 | PersistentVolume, PersistentVolumeClaim | DELETE +45 (possible data loss); otherwise +10 |
 | Secret | +25 |

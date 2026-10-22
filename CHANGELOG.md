@@ -58,6 +58,13 @@ include breaking changes, which are called out.
   ephemeral containers +35, CSR creation +25 and approval +45, `nodes/proxy`
   +40 on top of the session, namespace finalizers +40
   ([GHSA-9fh4-4cw7-36cw](https://github.com/kubeamber/kubeamber/security/advisories/GHSA-9fh4-4cw7-36cw)).
+- Agents could repoint the `kubeamber.dev` API group at a server of their
+  own by changing its APIService (`v1alpha1.kubeamber.dev`, which the API
+  server creates for the CRD). That server would then answer KubeAmber's reads
+  of ChangeRequests, approvals included. Self-protection now denies agents any
+  change to an APIService for the group, and other APIService changes score
+  +50, because they can feed the cluster false data
+  ([GHSA-6jmw-7398-fmpp](https://github.com/kubeamber/kubeamber/security/advisories/GHSA-6jmw-7398-fmpp)).
 
 ## [0.2.0] - 2026-10-21
 

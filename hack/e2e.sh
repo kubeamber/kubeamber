@@ -172,6 +172,9 @@ check "agent rewrites KubeAmber's policy" blocked "KubeAmber's namespace" -- \
 check "agent scales KubeAmber to zero" blocked "KubeAmber's namespace" -- agent -n kubeamber-system scale deploy/kubeamber --replicas=0
 check "agent deletes the ChangeRequest CRD" blocked "KubeAmber's API definitions" -- \
   agent delete crd changerequests.kubeamber.dev --dry-run=server
+check "agent repoints KubeAmber's API at its own server" blocked "which server answers KubeAmber's API" -- \
+  agent patch apiservice v1alpha1.kubeamber.dev --dry-run=server --type merge \
+  -p '{"spec":{"service":{"namespace":"shop","name":"checkout","port":443},"insecureSkipTLSVerify":true}}'
 check "agent deletes KubeAmber's ClusterRole" blocked "KubeAmber's permissions" -- agent delete clusterrole kubeamber --dry-run=server
 check "agent deletes KubeAmber's webhook configuration" blocked "agents cannot change admission webhooks" -- \
   agent delete validatingwebhookconfiguration kubeamber --dry-run=server

@@ -164,6 +164,8 @@ func kindFactors(a *Assessment, c Change) {
 		"admissionregistration.k8s.io/MutatingAdmissionPolicy",
 		"admissionregistration.k8s.io/MutatingAdmissionPolicyBinding":
 		a.add(50, "changes admission control, which can switch off cluster safety checks")
+	case "apiregistration.k8s.io/APIService":
+		a.add(50, "changes which server answers an API group, which can feed the cluster false data")
 	case "Secret":
 		a.add(25, "touches a Secret")
 	case "Node":

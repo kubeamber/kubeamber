@@ -8,6 +8,7 @@ var clusterScoped = map[string]bool{
 	"Node":             true,
 	"PersistentVolume": true,
 	"apiextensions.k8s.io/CustomResourceDefinition":                 true,
+	"apiregistration.k8s.io/APIService":                             true,
 	"rbac.authorization.k8s.io/ClusterRole":                         true,
 	"rbac.authorization.k8s.io/ClusterRoleBinding":                  true,
 	"storage.k8s.io/StorageClass":                                   true,

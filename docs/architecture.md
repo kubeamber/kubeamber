@@ -219,6 +219,10 @@ change:
   Namespace object, including the policy ConfigMap and the TLS Secret;
 - targets admission configuration named `kubeamber` or `kubeamber-*`;
 - targets a CRD whose name ends in `.kubeamber.dev`;
+- targets an APIService for the `kubeamber.dev` group (by name or `spec.group`).
+  The API server creates a local `v1alpha1.kubeamber.dev` APIService for the
+  CRD; pointing it at another server would let that server answer
+  KubeAmber's own reads, approvals included;
 - targets RBAC objects named `kubeamber` or `kubeamber-*`;
 - creates, changes or deletes a service account whose `kubeamber.dev/owner`
   annotation would change, which would hijack or forge a developer's agent

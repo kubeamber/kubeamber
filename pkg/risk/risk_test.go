@@ -151,6 +151,12 @@ func TestAssess(t *testing.T) {
 			wantReason: "acts as that identity",
 		},
 		{
+			name:       "repoint an API group",
+			change:     Change{Operation: "UPDATE", Group: "apiregistration.k8s.io", Kind: "APIService", Name: "v1beta1.metrics.k8s.io"},
+			want:       70,
+			wantReason: "which server answers an API group",
+		},
+		{
 			name:   "evict a pod",
 			change: Change{Operation: "CREATE", Kind: "Pod", Resource: "pods", SubResource: "eviction", Namespace: "shop", Name: "p"},
 			want:   25,
