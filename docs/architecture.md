@@ -253,8 +253,11 @@ condition.
 ## Telemetry
 
 Telemetry uses OpenTelemetry and the standard `OTEL_*` environment variables.
-Nothing is exported unless `OTEL_EXPORTER_OTLP_ENDPOINT` (or the traces or
-metrics variant) is set; export is OTLP/HTTP.
+Each replica serves its metrics for Prometheus on `:9090/metrics`, over plain
+HTTP (`--metrics-addr`; empty turns it off). Traces and metrics are pushed over
+OTLP/HTTP only when `OTEL_EXPORTER_OTLP_ENDPOINT`, or the traces or metrics
+variant, is set; each signal starts only when its own endpoint or the shared one
+is configured.
 
 - **Span** `kubeamber.review` per agent request, with attributes
   `gen_ai.agent.name`, `kubeamber.outcome`, `kubeamber.verdict`,
@@ -264,7 +267,9 @@ metrics variant) is set; export is OTLP/HTTP.
   `kubeamber.dev/traceparent`, the span links to that span context.
 - **Metrics**: `kubeamber.decisions` (counter, by `gen_ai.agent.name` and
   `kubeamber.outcome` = allow / hold / deny / approved / rejected) and
-  `kubeamber.risk.score` (histogram, buckets every 10 points).
+  `kubeamber.risk.score` (histogram, buckets every 10 points). Prometheus sees
+  them as `kubeamber_decisions_total` and `kubeamber_risk_score`
+  ([integrations](integrations.md#prometheus-and-grafana-alloy)).
 - **Audit log**: admission responses carry audit annotations, which the API
   server records as `agents.kubeamber.dev/verdict`, `agents.kubeamber.dev/score`,
   `agents.kubeamber.dev/agent` and `agents.kubeamber.dev/change-request`.

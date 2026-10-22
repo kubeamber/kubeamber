@@ -223,5 +223,19 @@ check "  ...so the agent can do nothing" blocked "[Ff]orbidden|Unauthorized" -- 
 wait_for 30 sh -c "kubectl --kubeconfig $WORK/claude.kubeconfig -n shop get pods 2>&1 | grep -q Unauthorized"
 check "  ...and within seconds its token is rejected outright" blocked "Unauthorized" -- claude_kubectl -n shop get pods
 
+step "11. Prometheus can scrape KubeAmber's decisions"
+# Each replica counts the requests it reviewed, so read every replica (one that
+# is shutting down may not answer).
+scrape_all() {
+  local pod
+  for pod in $(k -n kubeamber-system get pods -l app.kubernetes.io/name=kubeamber -o name); do
+    k get --raw "/api/v1/namespaces/kubeamber-system/pods/${pod#pod/}:9090/proxy/metrics" || true
+  done
+}
+check "decisions are counted by agent and outcome" allowed \
+  'kubeamber_decisions_total\{[^}]*gen_ai_agent_name="sre-agent"[^}]*kubeamber_outcome="hold"' -- scrape_all
+check "  ...denials too" allowed 'kubeamber_decisions_total\{[^}]*kubeamber_outcome="deny"' -- scrape_all
+check "risk scores are recorded as a histogram" allowed 'kubeamber_risk_score_bucket\{[^}]*le="30"' -- scrape_all
+
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]

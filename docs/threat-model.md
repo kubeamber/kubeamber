@@ -95,6 +95,7 @@ should cover them with other controls.
 - Keep `failurePolicy: Fail` on the agents webhook.
 - Run at least two webhook replicas.
 - Export telemetry and alert on denied and held decisions.
+- The metrics port (`9090`) is unauthenticated plain HTTP and reveals agent names and decision counts. If that matters, allow it only from your Prometheus or Alloy with a NetworkPolicy, or turn it off and push over OTLP instead.
 - Review the policy ConfigMap through the same change process as other security configuration.
 
 ## Reporting

@@ -28,6 +28,8 @@ chart-lint: ## Lint the Helm chart and check its CRD matches deploy/
 	@diff -q deploy/crd.yaml $(CHART)/files/crd.yaml >/dev/null || (echo "$(CHART)/files/crd.yaml is out of date: run make chart-sync" && exit 1)
 	helm lint $(CHART)
 	helm lint $(CHART) --set bridge.enabled=true --set webhook.tls.existingSecret=tls --set webhook.tls.certManagerCertificate=ns/cert
+	helm lint $(CHART) --set metrics.serviceMonitor.enabled=true --set metrics.serviceMonitor.labels.release=prometheus
+	helm lint $(CHART) --set metrics.enabled=false
 
 docker-build: ## Build the container image
 	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .

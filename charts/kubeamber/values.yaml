@@ -39,6 +39,22 @@ webhook:
     # ...or give the CA bundle (PEM) yourself.
     caBundle: ""
 
+# Prometheus metrics: decisions by agent and outcome, and risk scores, served
+# over plain HTTP on /metrics (docs/integrations.md#prometheus-and-grafana-alloy).
+metrics:
+  enabled: true
+  port: 9090
+  # Add prometheus.io/scrape, /port and /path annotations to the pods, for
+  # Prometheus or Grafana Alloy setups that discover targets that way.
+  scrapeAnnotations: true
+  # Create a ServiceMonitor for the Prometheus Operator (its CRD must exist).
+  # Grafana Alloy's prometheus.operator.servicemonitors component reads it too.
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    # Labels your Prometheus selects ServiceMonitors by, e.g. release: prometheus.
+    labels: {}
+
 # Block agents from changing admission webhooks, which Kubernetes never sends
 # to webhooks for review (docs/architecture.md). Strongly recommended.
 admissionPolicy:

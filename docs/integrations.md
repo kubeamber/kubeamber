@@ -291,3 +291,84 @@ Then:
 - **Audit**: `agents.kubeamber.dev/verdict`, `score`, `agent` and
   `change-request` audit annotations join KubeAmber decisions with Kubernetes
   audit events in Loki or any log store.
+
+## Prometheus and Grafana Alloy
+
+Each webhook replica serves its metrics in the Prometheus format on port
+`9090`, path `/metrics`, over plain HTTP. This is on by default, with or without
+OTLP. Turn it off with `metrics.enabled=false` in the chart, or
+`--metrics-addr=` on the command line.
+
+| Metric | Type | Labels | What it counts |
+|---|---|---|---|
+| `kubeamber_decisions_total` | counter | `gen_ai_agent_name`, `kubeamber_outcome` | Decisions on agent changes. Outcomes: `allow`, `hold`, `deny`, `approved` (an approved retry let through) and `rejected` (refused after a person rejected it). |
+| `kubeamber_risk_score` | histogram, buckets every 10 points | `gen_ai_agent_name` | The risk score of each agent change. |
+| `target_info` | gauge | `service_name`, `service_version`, `host_name` | One series per replica. |
+
+Go runtime and process metrics (`go_*`, `process_*`) are included. Each replica
+counts only the requests it reviewed, so add replicas up in queries:
+
+```promql
+sum by (gen_ai_agent_name, kubeamber_outcome) (rate(kubeamber_decisions_total[5m]))
+```
+
+Pick whichever collection method your cluster already uses:
+
+**Scrape annotations.** The pods carry `prometheus.io/scrape: "true"`,
+`prometheus.io/port: "9090"` and `prometheus.io/path: /metrics`, which the usual
+`kubernetes-pods` scrape job picks up. In Grafana Alloy, find the pods by label
+and keep the port named `metrics`:
+
+```alloy
+discovery.kubernetes "kubeamber" {
+	role = "pod"
+
+	namespaces {
+		names = ["kubeamber-system"]
+	}
+
+	selectors {
+		role  = "pod"
+		label = "app.kubernetes.io/name=kubeamber"
+	}
+}
+
+discovery.relabel "kubeamber" {
+	targets = discovery.kubernetes.kubeamber.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_port_name"]
+		regex         = "metrics"
+		action        = "keep"
+	}
+}
+
+prometheus.scrape "kubeamber" {
+	targets    = discovery.relabel.kubeamber.output
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+```
+
+**ServiceMonitor.** With the Prometheus Operator, or Alloy's
+`prometheus.operator.servicemonitors`, let the chart create one:
+
+```sh
+helm upgrade kubeamber oci://ghcr.io/kubeamber/charts/kubeamber -n kubeamber-system --reuse-values \
+  --set metrics.serviceMonitor.enabled=true --set metrics.serviceMonitor.labels.release=prometheus
+```
+
+Set the labels to whatever your Prometheus selects ServiceMonitors by.
+
+**Push instead of scrape.** Prometheus 3 can receive OTLP directly when started
+with `--web.enable-otlp-receiver`. Point only the metrics exporter at it, and
+KubeAmber pushes the same metrics without a scrape job:
+
+```yaml
+webhook:
+  env:
+    - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+      value: http://prometheus.monitoring:9090/api/v1/otlp/v1/metrics
+```
+
+The same works for any OTLP receiver, such as Alloy's `otelcol.receiver.otlp`
+or an OpenTelemetry Collector.

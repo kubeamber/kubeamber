@@ -16,7 +16,11 @@ spec:
       labels:
         {{- include "kubeamber.labels" . | nindent 8 }}
         app.kubernetes.io/name: kubeamber
-      {{- with .Values.webhook.podAnnotations }}
+      {{- $annotations := deepCopy (.Values.webhook.podAnnotations | default dict) }}
+      {{- if and .Values.metrics.enabled .Values.metrics.scrapeAnnotations }}
+      {{- $_ := merge $annotations (dict "prometheus.io/scrape" "true" "prometheus.io/port" (toString .Values.metrics.port) "prometheus.io/path" "/metrics") }}
+      {{- end }}
+      {{- with $annotations }}
       annotations: {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
@@ -53,6 +57,7 @@ spec:
           args:
             - webhook
             - --policy=/etc/kubeamber/policy.yaml
+            - --metrics-addr={{ if .Values.metrics.enabled }}:{{ .Values.metrics.port }}{{ end }}
             {{- if not .Values.admissionPolicy.enabled }}
             - --admission-policy=
             {{- end }}
@@ -71,6 +76,10 @@ spec:
           ports:
             - name: https
               containerPort: 9443
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+            {{- end }}
           readinessProbe:
             httpGet: {path: /healthz, port: https, scheme: HTTPS}
             periodSeconds: 5
@@ -110,6 +119,11 @@ spec:
     - name: https
       port: 443
       targetPort: https
+    {{- if .Values.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+    {{- end }}
 {{- if .Values.webhook.podDisruptionBudget.enabled }}
 ---
 apiVersion: policy/v1

@@ -12,6 +12,9 @@ spec:
     - name: https
       port: 443
       targetPort: https
+    - name: metrics
+      port: 9090
+      targetPort: metrics
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -29,6 +32,10 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: kubeamber
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: /metrics
     spec:
       serviceAccountName: kubeamber
       securityContext:
@@ -56,6 +63,9 @@ spec:
           ports:
             - name: https
               containerPort: 9443
+            # Prometheus metrics on /metrics, plain HTTP (--metrics-addr).
+            - name: metrics
+              containerPort: 9090
           readinessProbe:
             httpGet: {path: /healthz, port: https, scheme: HTTPS}
             periodSeconds: 5
