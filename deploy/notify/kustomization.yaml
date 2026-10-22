@@ -1,0 +1,14 @@
+# Optional: tell people in Slack, Teams or a webhook about held changes.
+# Install after deploy/:
+#   kubectl apply -k deploy/notify
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - rbac.yaml
+  - deployment.yaml
+configMapGenerator:
+  - name: kubeamber-notify
+    namespace: kubeamber-system
+    files: [notify.yaml]
+    options:
+      disableNameSuffixHash: true

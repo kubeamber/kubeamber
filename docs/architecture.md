@@ -129,6 +129,17 @@ approval from the ticket is usable only inside that window. See
 [proposal 0001](proposals/0001-change-management.md) for the full protocol and
 the rules the webhook enforces on the bridge.
 
+### Notifications
+
+`kubeamber notify` watches ChangeRequests and posts to Slack, Microsoft Teams
+or a generic webhook as each one is held, still waiting, approved, rejected,
+applied or expired. It only reads ChangeRequests, so it needs no trust from
+the webhook, and it is never in the admission path. It reads the policy file
+for `approvals.ttl`, so "expired" means the same thing as in the webhook, and
+it records what it has sent in the `kubeamber-notify-state` ConfigMap, so a
+restart repeats nothing. Delivery is at least once per channel. Run one
+replica: two would send everything twice.
+
 ### Two-person rule
 
 The same webhook has a second entry, `changerequests.kubeamber.dev`, which

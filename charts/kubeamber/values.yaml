@@ -131,3 +131,41 @@ bridge:
       fields:
         category: Software
       configurationItems: {}
+
+# Notifications in Slack, Microsoft Teams or any webhook: a message when an
+# agent's change is held, a reminder, and when it is approved, rejected,
+# applied or expires (docs/integrations.md#notifications-in-slack-teams-or-any-webhook).
+notify:
+  enabled: false
+  # Secret in the release namespace with the webhook URLs, mounted at
+  # /etc/kubeamber/notify-secrets. Create it before enabling notifications.
+  secretName: kubeamber-notify
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {memory: 128Mi}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  config:
+    # Shown in every message, so a shared channel can tell clusters apart.
+    cluster: ""
+    interval: 15s
+    # One reminder for a change still waiting this long; "0s" turns it off.
+    remindAfter: 15m
+    # Each channel reads its URL from a file in the Secret above.
+    channels: []
+    # - name: platform
+    #   slack: {urlFile: /etc/kubeamber/notify-secrets/slack-url}
+    # - name: oncall
+    #   teams: {urlFile: /etc/kubeamber/notify-secrets/teams-url}
+    # - name: audit
+    #   webhook:
+    #     urlFile: /etc/kubeamber/notify-secrets/webhook-url
+    #     secretFile: /etc/kubeamber/notify-secrets/webhook-signing-key
+    # Without routes, every channel gets every message.
+    routes: []
+    # - channels: [platform]
+    # - channels: [oncall]
+    #   events: [held, reminder]
+    #   minRisk: 60
+    #   namespaces: [prod, "prod-*"]
