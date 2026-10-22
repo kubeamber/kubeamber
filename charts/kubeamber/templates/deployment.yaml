@@ -58,6 +58,7 @@ spec:
             - webhook
             - --policy=/etc/kubeamber/policy.yaml
             - --metrics-addr={{ if .Values.metrics.enabled }}:{{ .Values.metrics.port }}{{ end }}
+            - --events={{ .Values.webhook.events | default "none" }}
             {{- if not .Values.admissionPolicy.enabled }}
             - --admission-policy=
             {{- end }}

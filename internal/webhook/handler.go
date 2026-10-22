@@ -28,6 +28,7 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/tools/events"
 
 	"github.com/kubeamber/kubeamber/internal/changerequest"
 	"github.com/kubeamber/kubeamber/pkg/decide"
@@ -79,6 +80,10 @@ type Handler struct {
 	}
 	Now func() time.Time
 	Log *slog.Logger
+	// Events records decisions as Kubernetes Events on the changed objects,
+	// for the outcomes in EventOutcomes. Nil records none.
+	Events        events.EventRecorder
+	EventOutcomes map[string]bool
 
 	tracer    trace.Tracer
 	decisions metric.Int64Counter
@@ -189,6 +194,7 @@ func (h *Handler) reviewChange(ctx context.Context, req *admissionv1.AdmissionRe
 	if crName != "" {
 		resp.AuditAnnotations["change-request"] = crName
 	}
+	h.recordEvent(req, change, d, outcome, crName, resp.Allowed)
 
 	attrs := []attribute.KeyValue{
 		attribute.String("gen_ai.agent.name", d.Agent),

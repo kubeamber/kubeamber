@@ -267,6 +267,38 @@ curl -X POST 'http://127.0.0.1:18080/fake/changes/CHG0030001/approve?by=jane.cab
 For a real instance, a free Personal Developer Instance from
 developer.servicenow.com works.
 
+## Kubernetes Events
+
+KubeAmber records its decisions as Kubernetes Events on the object the agent
+tried to change. The team that owns an object sees what happened to it without
+reading KubeAmber's logs:
+
+```sh
+kubectl -n prod get events --field-selector reason=AgentChangeHeld
+kubectl -n prod describe deployment checkout
+```
+
+| Reason | Type | Recorded when |
+|---|---|---|
+| `AgentChangeHeld` | Warning | A change is held. The message names the ChangeRequest and gives the `kubeamber approve` and `kubeamber reject` commands. |
+| `AgentChangeDenied` | Warning | A change is denied, with the reasons and risk factors. |
+| `AgentChangeApproved` | Normal | An agent's retry is let through because its ChangeRequest was approved. |
+| `AgentChangeRejected` | Warning | An agent's retry is refused because a person rejected its ChangeRequest. |
+| `AgentChangeAllowed` | Normal | A change is allowed. Off by default, because routine changes would flood the event stream. |
+
+- Events about objects that already exist also appear in `kubectl describe`.
+  For a new object, look in `kubectl get events` in its namespace. Events about
+  cluster-scoped objects go to the `default` namespace.
+- The ChangeRequest is the Event's related object, and the reporting controller
+  is `kubeamber.dev/webhook`.
+- Dry runs never produce Events.
+- Choose which decisions to record with `webhook.events` in the chart, or
+  `--events` on the command line (for example `hold,deny`, `all`, or `none`).
+
+Anything that already forwards Kubernetes Events can now carry KubeAmber's
+decisions: Grafana Alloy's `loki.source.kubernetes_events`, the OpenTelemetry
+Collector's `k8s_events` receiver, or an event exporter that posts to chat.
+
 ## OpenTelemetry and Grafana
 
 Set the standard variables on the webhook Deployment:

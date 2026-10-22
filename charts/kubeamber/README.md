@@ -44,6 +44,7 @@ node, so the chart does not offer a DaemonSet.
 | `webhook.failurePolicy` | `Fail` | Fail closed: agents wait while KubeAmber is down. Humans and controllers never reach the webhook. |
 | `webhook.timeoutSeconds` | `5` | |
 | `webhook.env` | `[]` | Extra environment, e.g. `OTEL_EXPORTER_OTLP_ENDPOINT`. |
+| `webhook.events` | `hold,deny,approved,rejected` | Decisions recorded as Kubernetes Events on the changed objects; `all` adds allows, empty turns Events off. |
 | `webhook.tls.existingSecret` | `""` | Use this `kubernetes.io/tls` Secret instead of KubeAmber's self-managed certificate. |
 | `webhook.tls.certManagerCertificate` | `""` | With `existingSecret`: `namespace/certificate` for cert-manager's CA injection. |
 | `webhook.tls.caBundle` | `""` | With `existingSecret`: the CA (PEM), if not using cert-manager. |

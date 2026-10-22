@@ -22,6 +22,10 @@ webhook:
   affinity: {}
   priorityClassName: ""
   podAnnotations: {}
+  # Decisions to record as Kubernetes Events on the changed objects, shown by
+  # `kubectl get events` and `kubectl describe`: a comma-separated list of
+  # allow, hold, deny, approved and rejected, or "all". Empty turns Events off.
+  events: hold,deny,approved,rejected
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
