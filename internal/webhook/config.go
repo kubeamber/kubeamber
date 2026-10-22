@@ -10,6 +10,7 @@ import (
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/retry"
 
 	"github.com/kubeamber/kubeamber/pkg/policy"
 )
@@ -83,43 +84,57 @@ type Configurator struct {
 func (c *Configurator) Sync(ctx context.Context, caPEM []byte, p *policy.Policy) (bool, error) {
 	cond := admissionregv1.MatchCondition{Name: AgentMatchCondition, Expression: AgentExpression(p, c.SelfUser)}
 
-	api := c.Client.AdmissionregistrationV1().ValidatingWebhookConfigurations()
-	cfg, err := api.Get(ctx, c.Name, metav1.GetOptions{})
-	if err != nil {
-		return false, fmt.Errorf("reading ValidatingWebhookConfiguration %s: %w", c.Name, err)
-	}
+	// Every replica syncs, so two may write the same content at once: on a
+	// conflict, read again, and the second attempt usually finds nothing to do.
 	changed := false
-	for i := range cfg.Webhooks {
-		w := &cfg.Webhooks[i]
-		if caPEM != nil && !bytes.Equal(w.ClientConfig.CABundle, caPEM) {
-			w.ClientConfig.CABundle = caPEM
-			changed = true
+	api := c.Client.AdmissionregistrationV1().ValidatingWebhookConfigurations()
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		cfg, err := api.Get(ctx, c.Name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("reading ValidatingWebhookConfiguration %s: %w", c.Name, err)
 		}
-		if w.Name == AgentsWebhook {
-			changed = setCondition(&w.MatchConditions, cond) || changed
+		changed = false
+		for i := range cfg.Webhooks {
+			w := &cfg.Webhooks[i]
+			if caPEM != nil && !bytes.Equal(w.ClientConfig.CABundle, caPEM) {
+				w.ClientConfig.CABundle = caPEM
+				changed = true
+			}
+			if w.Name == AgentsWebhook {
+				changed = setCondition(&w.MatchConditions, cond) || changed
+			}
 		}
-	}
-	if changed {
-		if _, err := api.Update(ctx, cfg, metav1.UpdateOptions{}); err != nil {
-			return false, fmt.Errorf("updating ValidatingWebhookConfiguration %s: %w", c.Name, err)
+		if !changed {
+			return nil
 		}
+		_, err = api.Update(ctx, cfg, metav1.UpdateOptions{})
+		return err
+	})
+	if err != nil {
+		return false, fmt.Errorf("updating ValidatingWebhookConfiguration %s: %w", c.Name, err)
 	}
 
 	if c.AdmissionPolicy == "" {
 		return changed, nil
 	}
+	vapChanged := false
 	vapAPI := c.Client.AdmissionregistrationV1().ValidatingAdmissionPolicies()
-	vap, err := vapAPI.Get(ctx, c.AdmissionPolicy, metav1.GetOptions{})
-	if err != nil {
-		return changed, fmt.Errorf("reading ValidatingAdmissionPolicy %s: %w", c.AdmissionPolicy, err)
-	}
-	if setCondition(&vap.Spec.MatchConditions, cond) {
-		if _, err := vapAPI.Update(ctx, vap, metav1.UpdateOptions{}); err != nil {
-			return changed, fmt.Errorf("updating ValidatingAdmissionPolicy %s: %w", c.AdmissionPolicy, err)
+	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		vap, err := vapAPI.Get(ctx, c.AdmissionPolicy, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("reading ValidatingAdmissionPolicy %s: %w", c.AdmissionPolicy, err)
 		}
-		changed = true
+		vapChanged = setCondition(&vap.Spec.MatchConditions, cond)
+		if !vapChanged {
+			return nil
+		}
+		_, err = vapAPI.Update(ctx, vap, metav1.UpdateOptions{})
+		return err
+	})
+	if err != nil {
+		return changed, fmt.Errorf("updating ValidatingAdmissionPolicy %s: %w", c.AdmissionPolicy, err)
 	}
-	return changed, nil
+	return changed || vapChanged, nil
 }
 
 // setCondition puts cond first in conds, keeping any other conditions, and

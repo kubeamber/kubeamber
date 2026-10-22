@@ -50,6 +50,15 @@ include breaking changes, which are called out.
   exporter that sent to `localhost:4318` and failed. Traces and metrics now
   start only when their own endpoint, or the shared one, is set, so metrics can
   be pushed straight to Prometheus's OTLP receiver.
+- After a certificate renewal, webhook replicas wrote different CA bundles
+  into the webhook configuration, so about half of agents' requests and
+  approvals failed until every pod restarted
+  ([#16](https://github.com/kubeamber/kubeamber/issues/16)). A renewal now
+  keeps the CA, the CA key is stored in the Secret, and each replica reloads
+  the certificate and publishes the Secret's CA every resync interval. When the
+  CA must change, the old one stays in the bundle until the next renewal.
+  Certificates from `--tls-cert-file` are reloaded too. Replicas updating the
+  webhook configuration at the same time no longer log an error.
 
 ## [0.2.0] - 2026-10-21
 

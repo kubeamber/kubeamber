@@ -28,7 +28,7 @@ any item. Larger items get a design issue before implementation.
 - Approval notifications and one-click decisions in Slack and Microsoft Teams
 - Change management phase 2: agents working under human-raised tickets, standard changes for allowed changes, emergency changes during incidents
 - More change-management providers: Jira Service Management, BMC Helix, Freshservice
-- Certificate rotation without restart
+- [x] Certificate rotation without restart
 - Tamper detection: watch KubeAmber's webhook configuration and admission policy, restore them if an agent removes them, and emit a `kubeamber.tamper` event (admission policies are exempt from admission, so this is the remaining layer beyond RBAC)
 - Signed releases, SBOMs and provenance (goreleaser, cosign, SLSA)
 - OpenSSF Best Practices badge and Scorecard

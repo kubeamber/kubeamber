@@ -245,17 +245,37 @@ lets it delete that binding could remove the protection and then the webhook.
 
 ## TLS
 
-By default the webhook manages its own certificates. On startup it reads the
-Secret `kubeamber-webhook-tls` in its namespace. If the Secret is missing,
-expires within 30 days or was issued for another Service name, KubeAmber
-generates an ECDSA P-256 CA (10 years) and serving certificate (1 year) and
-writes them. It then publishes the CA in the `caBundle` of every webhook in the
-configuration. Replicas share the Secret; if two race, the loser re-reads the
-winner's certificate.
+By default the webhook manages its own certificates, in the Secret
+`kubeamber-webhook-tls` in its namespace, shared by every replica. The Secret
+holds an ECDSA P-256 CA (10 years) with its key, and a serving certificate
+(1 year) that the CA signed.
+
+Each replica reads the Secret on startup and again every resync interval
+(`--resync-interval`, 30 seconds). If the certificate is missing, expires
+within 30 days or was issued for another Service name, the replica writes a
+new one. If two race, the loser reads the winner's. The replica then serves
+the certificate in the Secret, swapped in place without a restart, and
+publishes the Secret's CA in the `caBundle` of every webhook in the
+configuration. Because every replica publishes what the Secret holds, they
+agree after a renewal instead of overwriting each other's bundle.
+
+A renewal keeps the CA and issues only a new serving certificate, so the
+bundle does not change and a replica still serving the old certificate stays
+trusted until it reloads. The CA itself is replaced when it can no longer sign
+a full-length certificate, or when the Secret has no CA key (Secrets written
+by v0.2.0). The bundle then holds the new CA and the old one, until the next
+renewal drops the old one. Deleting the Secret replaces the CA without that
+overlap: agents' requests to a replica that has not reloaded yet fail for up
+to one resync interval.
+
+Anyone who can read the Secret can already serve as the webhook with its
+certificate key; the CA key adds nothing to that, because the API server only
+trusts the CA for the webhook's own Service name.
 
 To use cert-manager or another issuer, pass `--tls-cert-file` and
-`--tls-key-file` and inject the CA bundle yourself. Rotation currently happens
-on restart; in-process rotation is on the roadmap.
+`--tls-key-file` and inject the CA bundle yourself. The files are reloaded
+every resync interval too, so a renewed certificate in a mounted Secret is
+served without a restart.
 
 ## Policy hot reload
 
