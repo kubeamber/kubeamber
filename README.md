@@ -28,9 +28,6 @@ Every verdict carries a reason the agent can read and act on.
 
 ![How KubeAmber works: AI agents' changes go through kube-apiserver to KubeAmber, which scores each one and gives it a light. Allow is applied at once, hold creates a ChangeRequest that a person approves before the agent retries, deny is refused with the reason. Humans and controllers are never sent to KubeAmber.](docs/images/architecture-overview.png)
 
-[docs/architecture.md](docs/architecture.md) shows what runs in the cluster
-and how a held change is approved.
-
 <details>
 <summary>The same flow as text</summary>
 
@@ -77,6 +74,19 @@ and how a held change is approved.
   [integrations](docs/integrations.md#notifications-in-slack-teams-or-any-webhook).
 - **Traceable.** Decisions are OpenTelemetry spans linked to the agent's own
   trace. They also appear in the Kubernetes audit log.
+
+### The amber path
+
+When a change is held, one approval lets through exactly that change, once.
+
+![The amber path: the agent scales a Deployment to zero; KubeAmber creates ChangeRequest cr-1a2b with risk 75 and answers HOLD. An approver approves it with the CLI or ServiceNow, the agent retries the identical change, KubeAmber matches the fingerprint, uses the approval once and answers ALLOW.](docs/images/architecture-amber-path.png)
+
+### What runs in the cluster
+
+Everything `helm install kubeamber` puts in the cluster, and how the parts talk
+to each other. [docs/architecture.md](docs/architecture.md) has the details.
+
+![What runs in the cluster: kube-apiserver sends agents' changes over HTTPS to the kubeamber Service in kubeamber-system, which spreads them over two webhook pods. The webhook reads the kubeamber-policy ConfigMap and its TLS Secret, keeps the webhook configuration in sync, and creates ChangeRequests that approvers decide. The optional bridge mirrors held changes to ServiceNow. Decisions go to an OpenTelemetry Collector, SLO guards query Prometheus, and each agent signs in as its own ServiceAccount in kubeamber-agents.](docs/images/architecture-in-cluster.png)
 
 ## What an agent sees
 
