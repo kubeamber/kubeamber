@@ -22,6 +22,12 @@ rules:
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get]
+  {{- if .Values.webhook.events }}
+  # Record decisions as Events on the changed objects (webhook.events).
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [create, patch]
+  {{- end }}
   {{- if .Values.admissionPolicy.enabled }}
   - apiGroups: [admissionregistration.k8s.io]
     resources: [validatingadmissionpolicies]

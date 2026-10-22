@@ -17,6 +17,12 @@ include breaking changes, which are called out.
   histogram, and Go and process metrics. The chart adds scrape annotations and
   can create a ServiceMonitor (`metrics.serviceMonitor.enabled`).
   `--metrics-addr` changes the address, and an empty value turns it off.
+- Decisions are recorded as Kubernetes Events on the object the agent tried to
+  change, so they show up in `kubectl get events` and `kubectl describe`:
+  `AgentChangeHeld` (with the approve and reject commands),
+  `AgentChangeDenied`, `AgentChangeApproved` and `AgentChangeRejected`, and
+  optionally `AgentChangeAllowed`. Choose them with `--events` or the chart's
+  `webhook.events`. The webhook's ClusterRole can now create Events.
 
 ### Fixed
 

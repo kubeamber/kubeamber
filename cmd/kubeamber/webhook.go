@@ -8,11 +8,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/events"
 
 	"github.com/kubeamber/kubeamber/internal/agentid"
 	"github.com/kubeamber/kubeamber/internal/changerequest"
@@ -32,6 +35,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 		namespace, serviceAccount, service        string
 		bridgeServiceAccount                      string
 		webhookConfig, admissionPolicy, tlsSecret string
+		events                                    string
 		reload, resync                            time.Duration
 	}
 	cmd := &cobra.Command{
@@ -125,6 +129,18 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 				}
 			}()
 
+			eventOutcomes, err := webhook.ParseEventOutcomes(o.events)
+			if err != nil {
+				return fmt.Errorf("--events: %w", err)
+			}
+			var recorder events.EventRecorder
+			if len(eventOutcomes) > 0 {
+				broadcaster := events.NewBroadcaster(&events.EventSinkImpl{Interface: cs.EventsV1()})
+				broadcaster.StartRecordingToSink(ctx.Done())
+				defer broadcaster.Shutdown()
+				recorder = broadcaster.NewRecorder(scheme.Scheme, "kubeamber.dev/webhook")
+			}
+
 			engine := &decide.Engine{
 				Policy: current.Get,
 				Guard:  guards.NewPrometheus(),
@@ -133,6 +149,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			h := webhook.NewHandler(webhook.Handler{
 				Engine: engine, Store: &changerequest.Store{Client: dyn}, Policy: current.Get,
 				SelfUser: selfUser, BridgeUser: bridgeUser, Owners: &agentid.Owners{Client: cs}, Log: log,
+				Events: recorder, EventOutcomes: eventOutcomes,
 			})
 
 			mux := http.NewServeMux()
@@ -182,6 +199,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 	f.StringVar(&o.webhookConfig, "webhook-config", "kubeamber", "ValidatingWebhookConfiguration name")
 	f.StringVar(&o.admissionPolicy, "admission-policy", "kubeamber-protect-admission", "ValidatingAdmissionPolicy that blocks agents from changing admission webhooks (empty to skip)")
 	f.StringVar(&o.tlsSecret, "tls-secret", "kubeamber-webhook-tls", "Secret holding the self-managed certificate")
+	f.StringVar(&o.events, "events", strings.Join(webhook.EventOutcomes, ","), "decisions to record as Kubernetes Events on the changed object: a comma-separated list of allow, hold, deny, approved, rejected, or all, or none")
 	f.DurationVar(&o.reload, "reload-interval", 5*time.Second, "how often to check the policy file for changes")
 	f.DurationVar(&o.resync, "resync-interval", 30*time.Second, "how often to re-apply the webhook configuration (CA bundle and agent match condition)")
 	return cmd

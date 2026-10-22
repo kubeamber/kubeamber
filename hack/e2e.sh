@@ -49,6 +49,19 @@ refute() {
   fi
 }
 
+# decision_events NAMESPACE REASON TEXT: KubeAmber's Events with that reason,
+# once one of them mentions TEXT (Events are written asynchronously).
+decision_events() {
+  local out=""
+  for _ in $(seq 1 20); do
+    out=$(k -n "$1" get events --field-selector "reason=$2" \
+      -o jsonpath='{range .items[*]}{.reason} {.involvedObject.kind}/{.involvedObject.name} {.message}{"\n"}{end}')
+    grep -qF -- "$3" <<<"$out" && break
+    sleep 1
+  done
+  printf '%s\n' "$out"
+}
+
 step "Setup: shop and prod namespaces, a checkout service in each, an agent with cluster-admin"
 for ns in shop prod; do
   k create namespace "$ns" --dry-run=client -o yaml | k apply -f - >/dev/null
@@ -87,6 +100,8 @@ CR=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
 check "retrying before approval raises no duplicate" blocked "$CR is still waiting for a human" -- \
   agent -n prod scale deploy/checkout --replicas=0
 check "kubeamber list shows it" allowed "$CR +Pending +sre-agent +UPDATE Deployment prod/checkout +75" -- tp list
+check "the hold is an Event on prod/checkout, with the approve command" allowed \
+  "AgentChangeHeld Deployment/checkout .*kubeamber approve $CR" -- decision_events prod AgentChangeHeld "$CR"
 
 step "4. Nobody can approve a change on someone else's behalf"
 check "the agent approves its own change request" blocked "agents cannot" -- \
@@ -104,6 +119,8 @@ check "agent retries and is allowed" allowed "kubeamber: ALLOW \(approved by .* 
   agent -n prod scale deploy/checkout --replicas=0
 check "prod/checkout is at 0 replicas" allowed "^0$" -- k -n prod get deploy checkout -o jsonpath='{.spec.replicas}'
 check "the approval is used up" allowed "Consumed" -- k get changerequest "$CR"
+check "  ...and the approved retry is an Event too" allowed "AgentChangeApproved Deployment/checkout .*$CR was approved" -- \
+  decision_events prod AgentChangeApproved "$CR"
 k -n prod scale deploy/checkout --replicas=3 >/dev/null
 
 step "6. Rejections stick"
@@ -111,11 +128,16 @@ check "agent deletes prod/checkout" blocked "kubeamber: HOLD \(risk 60/100, remo
 CR2=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
 check "operator rejects" allowed "rejected $CR2" -- tp reject "$CR2" --reason "roll back the image instead"
 check "the agent's retry is refused with the reason" blocked "roll back the image instead" -- agent -n prod delete deploy checkout
+check "  ...and the refusal is an Event" allowed "AgentChangeRejected Deployment/checkout .*rejected change request $CR2" -- \
+  decision_events prod AgentChangeRejected "$CR2"
 
 step "7. Dangerous changes are denied outright"
 check "agent deletes namespace prod" blocked "kubeamber: DENY .*everything in it" -- agent delete namespace prod --dry-run=server
 check "agent grants itself cluster-admin" blocked "may not change RBAC" -- \
   agent apply -f examples/manifests/escalate-privileges.yaml
+check "  ...the denial of a cluster-scoped object is an Event in default" allowed \
+  "AgentChangeDenied ClusterRoleBinding/sre-agent-is-admin .*may not change RBAC" -- \
+  decision_events default AgentChangeDenied "sre-agent-is-admin"
 
 step "8. Agents cannot switch KubeAmber off"
 check "agent rewrites KubeAmber's policy" blocked "KubeAmber's namespace" -- \

@@ -20,6 +20,10 @@ rules:
   - apiGroups: [""]
     resources: [serviceaccounts]
     verbs: [get]
+  # Record decisions as Events on the changed objects (--events).
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [create, patch]
   - apiGroups: [admissionregistration.k8s.io]
     resources: [validatingadmissionpolicies]
     resourceNames: [kubeamber-protect-admission]

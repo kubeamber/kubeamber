@@ -275,6 +275,11 @@ is configured.
   `agents.kubeamber.dev/agent` and `agents.kubeamber.dev/change-request`.
 - **Logs**: one structured JSON line per decision on stdout, including the
   agent's stated intent.
+- **Kubernetes Events**: holds, denials, approved retries and rejections are
+  recorded as Events (events.k8s.io) on the changed object, with the
+  ChangeRequest as the related object (`--events`;
+  [integrations](integrations.md#kubernetes-events)). Recording is
+  asynchronous and never delays or changes a decision; dry runs record nothing.
 
 ## Failure modes
 
