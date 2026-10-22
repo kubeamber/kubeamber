@@ -57,7 +57,8 @@ bin/kubeamber check -f examples/manifests/scale-to-zero.yaml \
 | `internal/mcpserver` | MCP tools |
 | `cmd/kubeamber` | CLI |
 | `deploy/` | Kustomize manifests |
-| `docs/` | Documentation |
+| `docs/` | Documentation, published on the website |
+| `website/` | Site-only pages (home, getting started) and styles. Preview with `pip install -r website/requirements.txt && mkdocs serve`. |
 
 ## Pull requests
 

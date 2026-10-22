@@ -2,3 +2,5 @@
 *.test
 coverage*.out
 .DS_Store
+/site/
+__pycache__/

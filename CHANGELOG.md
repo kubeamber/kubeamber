@@ -32,6 +32,9 @@ include breaking changes, which are called out.
   in a ConfigMap, and is enabled with the chart's `notify.enabled` or
   `deploy/notify`.
 - Architecture diagrams in the README and `docs/architecture.md`.
+- A website at [kubeamber.github.io/kubeamber](https://kubeamber.github.io/kubeamber/),
+  built from `docs/` and the README with MkDocs Material and published by the
+  `website` workflow.
 
 ### Changed
 
