@@ -211,6 +211,32 @@ metadata:
 
 More in [docs/integrations.md](docs/integrations.md).
 
+## Vendor-neutral by design
+
+KubeAmber judges what an agent does to your cluster, not who built the agent.
+
+- **It scores the change, not the agent.** The scorer's only inputs are the
+  identity, the operation, the resource and the object before and after. No
+  prompt, model name, vendor SDK or tool name reaches it. A merge patch, a
+  `kubectl apply` and a `kubectl scale` that produce the same change get the
+  same score, so an agent that switches tools gets the same answer (see the
+  [kagent walkthrough](examples/kagent/README.md)).
+- **It recognises agents by their Kubernetes identity.** Every platform already
+  maps its identities to Kubernetes users, groups and service accounts: Entra
+  ID on AKS, IAM access entries on EKS, Google accounts on GKE, service
+  accounts for in-cluster agents. Adding an agent from any vendor is one line
+  of policy, with no plugin.
+- **There is no LLM in the decision.** The score is arithmetic over a published
+  table ([risk model](docs/risk-model.md)). The same change under the same
+  policy always gets the same score, a prompt-injected agent has nothing to
+  persuade, and nothing leaves the cluster.
+- **It sits where every agent has to pass.** Approval gates inside an agent
+  framework cover that framework only, and trust the agent's description of
+  what it is about to do. KubeAmber reads the actual request at the API server.
+- **It is built only from Kubernetes parts:** an admission webhook, CEL match
+  conditions, a CRD, RBAC, audit annotations and OpenTelemetry. It runs on any
+  conformant cluster.
+
 ## How it compares
 
 KubeAmber complements these tools; it does not replace them. It runs alongside
