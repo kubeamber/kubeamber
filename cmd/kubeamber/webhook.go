@@ -82,27 +82,22 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 				}
 			}
 
-			var tlsCfg *tls.Config
-			var caPEM []byte
+			certs := &webhook.Certs{Client: cs, Namespace: o.namespace, SecretName: o.tlsSecret, ServiceName: o.service}
+			serving := &webhook.Serving{Load: certs.Ensure}
 			if o.certFile != "" {
-				cert, err := tls.LoadX509KeyPair(o.certFile, o.keyFile)
-				if err != nil {
-					return err
+				serving.Load = func(context.Context) (tls.Certificate, []byte, error) {
+					cert, err := tls.LoadX509KeyPair(o.certFile, o.keyFile)
+					return cert, nil, err
 				}
-				tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-			} else {
-				certs := &webhook.Certs{Client: cs, Namespace: o.namespace, SecretName: o.tlsSecret, ServiceName: o.service}
-				cert, ca, err := certs.Ensure(ctx)
-				if err != nil {
-					return err
-				}
-				caPEM = ca
-				tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 			}
+			if err := serving.Refresh(ctx); err != nil {
+				return err
+			}
+			tlsCfg := &tls.Config{GetCertificate: serving.GetCertificate, MinVersion: tls.VersionTLS12}
 
 			configurator := &webhook.Configurator{Client: cs, Name: o.webhookConfig, AdmissionPolicy: o.admissionPolicy, SelfUser: selfUser}
 			sync := func(p *policy.Policy) {
-				changed, err := configurator.Sync(ctx, caPEM, p)
+				changed, err := configurator.Sync(ctx, serving.CABundle(), p)
 				switch {
 				case err != nil:
 					log.Error("syncing webhook configuration", "error", err)
@@ -115,7 +110,9 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			// Re-apply the configuration periodically too: `helm upgrade` or
 			// `kubectl apply -k` resets the CA bundle and the agent match
 			// condition to their placeholders, which would leave agents
-			// unreviewed until the next restart.
+			// unreviewed until the next restart. Reload the certificate
+			// first, so a renewal by any replica (or by cert-manager) is
+			// served and published by all of them.
 			go func() {
 				t := time.NewTicker(o.resync)
 				defer t.Stop()
@@ -124,6 +121,9 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 					case <-ctx.Done():
 						return
 					case <-t.C:
+						if err := serving.Refresh(ctx); err != nil {
+							log.Error("reloading the serving certificate", "error", err)
+						}
 						sync(current.Get())
 					}
 				}
@@ -201,7 +201,7 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 	f.StringVar(&o.tlsSecret, "tls-secret", "kubeamber-webhook-tls", "Secret holding the self-managed certificate")
 	f.StringVar(&o.events, "events", strings.Join(webhook.EventOutcomes, ","), "decisions to record as Kubernetes Events on the changed object: a comma-separated list of allow, hold, deny, approved, rejected, or all, or none")
 	f.DurationVar(&o.reload, "reload-interval", 5*time.Second, "how often to check the policy file for changes")
-	f.DurationVar(&o.resync, "resync-interval", 30*time.Second, "how often to re-apply the webhook configuration (CA bundle and agent match condition)")
+	f.DurationVar(&o.resync, "resync-interval", 30*time.Second, "how often to reload the serving certificate and re-apply the webhook configuration (CA bundle and agent match condition)")
 	return cmd
 }
 
