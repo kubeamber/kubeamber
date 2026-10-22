@@ -1,0 +1,95 @@
+# The KubeAmber website, built from docs/ and the site-only pages in website/.
+# Preview it with:  pip install -r website/requirements.txt && mkdocs serve
+site_name: KubeAmber
+site_description: Traffic lights for AI agents on Kubernetes. KubeAmber scores every change an AI agent makes to a cluster and gives it a light.
+site_url: https://kubeamber.github.io/kubeamber/
+repo_url: https://github.com/kubeamber/kubeamber
+repo_name: kubeamber/kubeamber
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; The KubeAmber Authors. Licensed under Apache 2.0.
+
+docs_dir: docs
+hooks:
+  - website/hooks.py
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Concepts:
+      - Architecture: architecture.md
+      - Risk model: risk-model.md
+      - Policy: policy.md
+  - Integrations: integrations.md
+  - Security:
+      - Threat model: threat-model.md
+      - Reporting a vulnerability: https://github.com/kubeamber/kubeamber/blob/main/SECURITY.md
+  - Project:
+      - Roadmap: https://github.com/kubeamber/kubeamber/blob/main/ROADMAP.md
+      - Contributing: https://github.com/kubeamber/kubeamber/blob/main/CONTRIBUTING.md
+      - Governance: https://github.com/kubeamber/kubeamber/blob/main/GOVERNANCE.md
+      - Changelog: https://github.com/kubeamber/kubeamber/blob/main/CHANGELOG.md
+      - "Proposal 0001: change management": proposals/0001-change-management.md
+      - Releasing: releasing.md
+
+theme:
+  name: material
+  logo: assets/images/kubeamber-icon-dark.svg
+  favicon: images/kubeamber-icon.svg
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - content.action.edit
+    - content.code.copy
+    - navigation.footer
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kubeamber/kubeamber
+      name: KubeAmber on GitHub
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn

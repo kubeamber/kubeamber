@@ -280,6 +280,9 @@ decide which of an agent's allowed changes need a human.
 
 ## Documentation
 
+The website, [kubeamber.github.io/kubeamber](https://kubeamber.github.io/kubeamber/),
+has all of it with search. The same pages are in [docs/](docs/):
+
 - [Architecture](docs/architecture.md): request flow, approval protocol, failure modes
 - [Policy reference](docs/policy.md)
 - [Risk model](docs/risk-model.md): every factor and its points
