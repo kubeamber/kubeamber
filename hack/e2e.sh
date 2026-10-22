@@ -79,6 +79,30 @@ check "agent edits a ConfigMap in shop" allowed "kubeamber: ALLOW" -- \
 step "3. Risky changes are held for a human"
 check "agent opens a shell in a prod pod" blocked "kubeamber: HOLD .*interactive session \(exec\)" -- \
   agent -n prod exec deploy/checkout -c app -- true
+POD=$(k -n prod get pods -l app=checkout -o jsonpath='{.items[0].metadata.name}')
+check "agent adds a debug container to a prod pod" blocked "kubeamber: HOLD \(risk 70/100\).*ephemeral container" -- \
+  agent -n prod debug "$POD" --image=registry.k8s.io/pause:3.10 -c debugger
+check "agent proxies into a prod pod" blocked "kubeamber: HOLD \(risk 60/100\).*interactive session \(proxy\)" -- \
+  agent get --raw "/api/v1/namespaces/prod/pods/$POD:80/proxy/"
+CSRDIR=$(mktemp -d)
+openssl req -new -newkey rsa:2048 -nodes -keyout "$CSRDIR/key.pem" -subj "/CN=mallory" -out "$CSRDIR/csr.pem" 2>/dev/null
+for who in agent human; do
+  cat >"$CSRDIR/$who.yaml" <<YAML
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata: {name: e2e-$who-csr}
+spec:
+  request: $(base64 <"$CSRDIR/csr.pem" | tr -d '\n')
+  signerName: kubernetes.io/kube-apiserver-client
+  usages: [client auth]
+YAML
+done
+check "agent asks for a client certificate" blocked "kubeamber: HOLD \(risk 40/100\).*client certificate" -- \
+  agent create -f "$CSRDIR/agent.yaml"
+k create -f "$CSRDIR/human.yaml" >/dev/null
+check "agent approves someone's certificate request" blocked "kubeamber: HOLD \(risk 65/100\).*approves certificate signing request e2e-human-csr" -- \
+  agent certificate approve e2e-human-csr
+k delete csr e2e-human-csr --ignore-not-found >/dev/null
 check "a server-side dry run is judged but raises nothing" blocked "dry run, so no change request" -- \
   agent -n prod scale deploy/checkout --replicas=0 --dry-run=server
 check "agent scales prod/checkout to 0" blocked "kubeamber: HOLD \(risk 75/100, replicas 3 → 0\)" -- \
@@ -116,6 +140,9 @@ step "7. Dangerous changes are denied outright"
 check "agent deletes namespace prod" blocked "kubeamber: DENY .*everything in it" -- agent delete namespace prod --dry-run=server
 check "agent grants itself cluster-admin" blocked "may not change RBAC" -- \
   agent apply -f examples/manifests/escalate-privileges.yaml
+NODE=$(k get nodes -o jsonpath='{.items[0].metadata.name}')
+check "agent reaches a node's kubelet through the API server" blocked "kubeamber: DENY \(risk 85/100\).*kubelet" -- \
+  agent get --raw "/api/v1/nodes/$NODE/proxy/healthz"
 
 step "8. Agents cannot switch KubeAmber off"
 check "agent rewrites KubeAmber's policy" blocked "KubeAmber's namespace" -- \

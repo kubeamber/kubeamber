@@ -7,6 +7,17 @@ include breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Security
+
+- Agents' subresource requests now reach KubeAmber. Before, an agent could add
+  a debug container to any pod (`kubectl debug`), approve a certificate
+  signing request for another identity, or proxy into pods, services and node
+  kubelets without review, because the webhook rule `"*"` does not match
+  subresources. The rules now match `*/*`, and these requests are scored:
+  ephemeral containers +35, CSR creation +25 and approval +45, `nodes/proxy`
+  +40 on top of the session, namespace finalizers +40
+  ([GHSA-9fh4-4cw7-36cw](https://github.com/kubeamber/kubeamber/security/advisories/GHSA-9fh4-4cw7-36cw)).
+
 ## [0.2.0] - 2026-10-21
 
 The first published release: signed container images, CLI binaries and the

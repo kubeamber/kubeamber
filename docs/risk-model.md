@@ -25,7 +25,7 @@ summed and the total is clamped to 0..100.
 | CREATE `pods/eviction` | +25 | evicts a pod (instead of the CREATE base) |
 | UPDATE | +10 | modifies a resource |
 | DELETE | +30 | deletes a resource |
-| CONNECT (`exec`, `attach`, `portforward`) | +35 | opens an interactive session into a running workload |
+| CONNECT (`exec`, `attach`, `portforward`, and `proxy` into pods, services and nodes) | +35 | opens an interactive session into a running workload |
 
 ## Kind
 
@@ -39,10 +39,13 @@ a Deployment, `pods/exec` is a Pod).
 | ClusterRole, ClusterRoleBinding | +45 (cluster-wide permissions; possible privilege escalation) |
 | Role, RoleBinding | +35 (namespace permissions; possible privilege escalation) |
 | Validating/MutatingWebhookConfiguration, Validating/MutatingAdmissionPolicy (and bindings) | +50 (can switch off cluster safety checks). The API server never sends these objects to webhooks, so this factor appears only in `kubeamber check` and MCP previews; in the cluster, `kubeamber-protect-admission` denies agents outright. |
-| Node | +40 |
+| Node | +40; for CONNECT to `nodes/proxy`, +40 because the kubelet can run commands in any pod on the node |
 | PersistentVolume, PersistentVolumeClaim | DELETE +45 (possible data loss); otherwise +10 |
 | Secret | +25 |
 | ServiceAccount token request (`serviceaccounts/token`) | +45 (whoever holds the token acts as that identity) |
+| CertificateSigningRequest | CREATE +25 (requests a client certificate); approval (`certificatesigningrequests/approval`) +45 (whoever holds the certificate acts as its identity) |
+| Namespace finalizers (`namespaces/finalize`) | +40 (force-deletes what is left in the namespace) |
+| Pod ephemeral containers (`pods/ephemeralcontainers`, e.g. `kubectl debug`) | +35 (much like opening a shell in the pod) |
 | NetworkPolicy | +20 (network isolation) |
 | Service, Ingress, Gateway, HTTPRoute, GRPCRoute | +10 (traffic routing) |
 | StatefulSet | +15 (stateful workload) |
@@ -107,6 +110,12 @@ From [pkg/risk/risk_test.go](../pkg/risk/risk_test.go), with `prod` and
 | Update a ConfigMap labelled critical | UPDATE 10, ConfigMap 5, critical 20 | 35 | hold |
 | Delete a 60-replica Deployment | DELETE 30, Deployment 5, ~60 pods 20 | 55 | hold |
 | Evict a pod | eviction 25 | 25 | allow |
+| `kubectl debug` adds a container to a pod in `prod` | UPDATE 10, ephemeral container 35, protected 25 | 70 | hold |
+| The same, but the debug container is privileged, in `shop` | UPDATE 10, ephemeral container 35, host access 40 | 85 | deny |
+| Proxy into a pod in `shop` | CONNECT 35 | 35 | hold |
+| Proxy into a node's kubelet (`nodes/proxy`) | CONNECT 35, kubelet 40, cluster-scoped 10 | 85 | deny |
+| Create a CertificateSigningRequest | CREATE 5, client certificate 25, cluster-scoped 10 | 40 | hold |
+| Approve a CertificateSigningRequest | UPDATE 10, approval 45, cluster-scoped 10 | 65 | hold |
 
 ## Tuning
 

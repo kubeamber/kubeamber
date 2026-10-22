@@ -153,9 +153,11 @@ power, for example an on-call group.
 
 ## Match conditions: agent traffic only
 
-The agents webhook matches CREATE, UPDATE and DELETE on every resource (`*`,
-`*/scale`, `pods/eviction`) and CONNECT on `pods/exec`, `pods/attach` and
-`pods/portforward`. It would be too
+The agents webhook matches CREATE, UPDATE and DELETE on every resource and
+every subresource (`*/*`: scale, eviction, token requests, ephemeral
+containers, certificate approvals, status, finalizers), and CONNECT on every
+core subresource (exec, attach, port-forward, and proxy into pods, services and
+nodes). It would be too
 expensive, and too risky, to put every request in the cluster through it.
 At startup and on every policy reload, KubeAmber regenerates a CEL match
 condition named `kubeamber-agents` from `spec.agents`:

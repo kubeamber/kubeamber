@@ -50,8 +50,9 @@ should cover them with other controls.
 - **Reads and data exfiltration.** Admission webhooks see writes, not `get`,
   `list` or `watch`. An agent with read access to Secrets can read them. Limit
   reads with RBAC, and watch the audit log.
-- **Effects inside workloads.** `exec` sessions are gated when they open
-  (CONNECT, +35), but KubeAmber does not see the commands run inside them.
+- **Effects inside workloads.** `exec`, `attach`, port-forward and proxy
+  sessions, and debug containers added with `kubectl debug`, are gated when
+  they open (+35), but KubeAmber does not see the commands run inside them.
   Anything a running pod does with its own credentials is out of scope.
 - **Agents with host or node access.** An agent that can reach the kubelet,
   container runtime, etcd or a node shell bypasses the API server and

@@ -20,6 +20,19 @@ func deployment(ns string, replicas int, image string) map[string]any {
 
 func protected(ns string) bool { return ns == "prod" || ns == "kube-system" }
 
+// podWithEphemeral is a Pod, with a debug container added if debug is set.
+func podWithEphemeral(debug, privileged bool) map[string]any {
+	spec := map[string]any{"containers": []any{map[string]any{"name": "app", "image": "shop:1"}}}
+	if debug {
+		c := map[string]any{"name": "debugger", "image": "busybox"}
+		if privileged {
+			c["securityContext"] = map[string]any{"privileged": true}
+		}
+		spec["ephemeralContainers"] = []any{c}
+	}
+	return map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": "p"}, "spec": spec}
+}
+
 func TestAssess(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -142,6 +155,56 @@ func TestAssess(t *testing.T) {
 			change: Change{Operation: "CREATE", Kind: "Pod", Resource: "pods", SubResource: "eviction", Namespace: "shop", Name: "p"},
 			want:   25,
 		},
+		{
+			name: "debug container in a prod pod",
+			change: Change{Operation: "UPDATE", Kind: "Pod", Resource: "pods", SubResource: "ephemeralcontainers", Namespace: "prod", Name: "p",
+				OldObject: podWithEphemeral(false, false), Object: podWithEphemeral(true, false)},
+			want:       70,
+			wantReason: "ephemeral container",
+		},
+		{
+			name: "privileged debug container",
+			change: Change{Operation: "UPDATE", Kind: "Pod", Resource: "pods", SubResource: "ephemeralcontainers", Namespace: "shop", Name: "p",
+				OldObject: podWithEphemeral(false, false), Object: podWithEphemeral(true, true)},
+			want:       85,
+			wantReason: "privileged",
+		},
+		{
+			name:       "proxy into a pod",
+			change:     Change{Operation: "CONNECT", Kind: "Pod", Resource: "pods", SubResource: "proxy", Namespace: "shop", Name: "p"},
+			want:       35,
+			wantReason: "(proxy)",
+		},
+		{
+			name:   "proxy into a prod service",
+			change: Change{Operation: "CONNECT", Kind: "Service", Resource: "services", SubResource: "proxy", Namespace: "prod", Name: "checkout"},
+			want:   60,
+		},
+		{
+			name:       "proxy into a node's kubelet",
+			change:     Change{Operation: "CONNECT", Kind: "Node", Resource: "nodes", SubResource: "proxy", Name: "node-1"},
+			want:       85,
+			wantReason: "kubelet",
+		},
+		{
+			name:       "request a client certificate",
+			change:     Change{Operation: "CREATE", Group: "certificates.k8s.io", Kind: "CertificateSigningRequest", Resource: "certificatesigningrequests", Name: "csr-1"},
+			want:       40,
+			wantReason: "client certificate",
+		},
+		{
+			name: "approve a certificate request",
+			change: Change{Operation: "UPDATE", Group: "certificates.k8s.io", Kind: "CertificateSigningRequest", Resource: "certificatesigningrequests",
+				SubResource: "approval", Name: "csr-1"},
+			want:       65,
+			wantReason: "acts as its identity",
+		},
+		{
+			name:       "remove a namespace's finalizers",
+			change:     Change{Operation: "UPDATE", Kind: "Namespace", Resource: "namespaces", SubResource: "finalize", Name: "shop"},
+			want:       50,
+			wantReason: "force-deletes",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -182,6 +245,16 @@ func TestParentKind(t *testing.T) {
 	}
 	if g, k := ParentKind("widgets", "", "example.com", "Widget"); g != "example.com" || k != "Widget" {
 		t.Errorf("widgets -> %s %s", g, k)
+	}
+	for res, want := range map[string][2]string{
+		"nodes":                      {"", "Node"},
+		"services":                   {"", "Service"},
+		"namespaces":                 {"", "Namespace"},
+		"certificatesigningrequests": {"certificates.k8s.io", "CertificateSigningRequest"},
+	} {
+		if g, k := ParentKind(res, "proxy", "", "SomeOptions"); g != want[0] || k != want[1] {
+			t.Errorf("%s subresource -> %s %s, want %v", res, g, k, want)
+		}
 	}
 }
 
