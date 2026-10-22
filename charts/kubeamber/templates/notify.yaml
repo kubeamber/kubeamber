@@ -1,0 +1,141 @@
+{{- if .Values.notify.enabled }}
+{{- $config := dict "apiVersion" "kubeamber.dev/v1alpha1" "kind" "NotifyConfig" "metadata" (dict "name" "default") "spec" .Values.notify.config }}
+# `kubeamber notify` only reads ChangeRequests; it never changes them.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeamber-notify
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeamber-notify
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [kubeamber.dev]
+    resources: [changerequests]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeamber-notify
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeamber-notify
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber-notify
+    namespace: {{ .Release.Namespace }}
+---
+# It records what it has sent in one ConfigMap in its own namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubeamber-notify
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create]
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [kubeamber-notify-state]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubeamber-notify
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubeamber-notify
+subjects:
+  - kind: ServiceAccount
+    name: kubeamber-notify
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubeamber-notify
+  namespace: {{ .Release.Namespace }}
+  labels: {{- include "kubeamber.labels" . | nindent 4 }}
+data:
+  notify.yaml: |
+{{ toYaml $config | indent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeamber-notify
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeamber.labels" . | nindent 4 }}
+    app.kubernetes.io/name: kubeamber-notify
+spec:
+  # One replica, replaced rather than rolled, so two notifiers never run at
+  # once and send the same message twice.
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeamber-notify
+  template:
+    metadata:
+      labels:
+        {{- include "kubeamber.labels" . | nindent 8 }}
+        app.kubernetes.io/name: kubeamber-notify
+      annotations:
+        # Restart when the configuration changes.
+        checksum/config: {{ toYaml $config | sha256sum }}
+    spec:
+      serviceAccountName: kubeamber-notify
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      {{- with .Values.notify.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.notify.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.notify.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: notify
+          image: {{ include "kubeamber.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: [notify, --config=/etc/kubeamber/notify/notify.yaml, --policy=/etc/kubeamber/policy/policy.yaml]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+          resources: {{- toYaml .Values.notify.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/kubeamber/notify, readOnly: true}
+            - {name: policy, mountPath: /etc/kubeamber/policy, readOnly: true}
+            - {name: secrets, mountPath: /etc/kubeamber/notify-secrets, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: kubeamber-notify}
+        - name: policy
+          configMap: {name: kubeamber-policy}
+        - name: secrets
+          secret: {secretName: {{ .Values.notify.secretName }}}
+{{- end }}

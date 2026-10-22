@@ -23,6 +23,14 @@ include breaking changes, which are called out.
   `AgentChangeDenied`, `AgentChangeApproved` and `AgentChangeRejected`, and
   optionally `AgentChangeAllowed`. Choose them with `--events` or the chart's
   `webhook.events`. The webhook's ClusterRole can now create Events.
+- `kubeamber notify`: messages in Slack, Microsoft Teams or any webhook when
+  an agent's change is held, a reminder if nobody decides, and again when it
+  is approved, rejected, applied or expires. Messages give the risk, the
+  factors and the commands to approve or reject. Routes send messages by
+  event, risk, agent and namespace. Generic webhooks can be signed with
+  HMAC-SHA256. The notifier only reads ChangeRequests, keeps what it has sent
+  in a ConfigMap, and is enabled with the chart's `notify.enabled` or
+  `deploy/notify`.
 
 ### Fixed
 

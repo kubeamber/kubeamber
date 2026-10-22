@@ -1,0 +1,54 @@
+# Create the Secret with the webhook URLs first, for example:
+#   kubectl -n kubeamber-system create secret generic kubeamber-notify \
+#     --from-literal=slack-url=https://hooks.slack.com/services/... \
+#     --from-literal=teams-url=https://...
+# or sync it from Vault with External Secrets.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubeamber-notify
+  namespace: kubeamber-system
+  labels:
+    app.kubernetes.io/name: kubeamber-notify
+spec:
+  # One replica, replaced rather than rolled, so two notifiers never run at
+  # once and send the same message twice.
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubeamber-notify
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubeamber-notify
+    spec:
+      serviceAccountName: kubeamber-notify
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: notify
+          image: ghcr.io/kubeamber/kubeamber:v0.2.0
+          args: [notify, --config=/etc/kubeamber/notify/notify.yaml, --policy=/etc/kubeamber/policy/policy.yaml]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/kubeamber/notify, readOnly: true}
+            - {name: policy, mountPath: /etc/kubeamber/policy, readOnly: true}
+            - {name: secrets, mountPath: /etc/kubeamber/notify-secrets, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: kubeamber-notify}
+        - name: policy
+          configMap: {name: kubeamber-policy}
+        - name: secrets
+          secret: {secretName: kubeamber-notify}

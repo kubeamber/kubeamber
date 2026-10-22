@@ -206,6 +206,101 @@ held, and 3 if anything would be denied. Treat 2 as "needs a human review" and
 3 as "block". Pass `--old` with the live object to score updates accurately,
 and `-o json` for machine-readable output.
 
+## Notifications in Slack, Teams or any webhook
+
+`kubeamber notify` tells people about held changes where they already work.
+Each message gives the change, the risk score and its factors, the agent's
+identity and stated intent, and the commands to approve or reject it.
+
+| Event | Sent when |
+|---|---|
+| `held` | An agent's change is waiting for a person. |
+| `reminder` | It is still waiting after `remindAfter` (default 15 minutes; sent once). |
+| `approved` / `rejected` | Someone decided, with who and why. |
+| `applied` | The agent retried and the approved change was made. |
+| `expired` | Nobody decided in time, or the approval was never used. Nothing was changed. |
+
+### Set it up
+
+1. Create the incoming webhooks: in Slack, an
+   [incoming webhook](https://api.slack.com/messaging/webhooks); in Microsoft
+   Teams, a Workflows flow that posts to a channel when a webhook request is
+   received (the older Office 365 connectors are retired).
+2. Keep the URLs in a Secret. They are credentials:
+
+   ```sh
+   kubectl -n kubeamber-system create secret generic kubeamber-notify \
+     --from-literal=slack-url='https://hooks.slack.com/services/...' \
+     --from-literal=teams-url='https://...'
+   ```
+
+3. Turn it on in the chart:
+
+   ```yaml
+   notify:
+     enabled: true
+     config:
+       cluster: prod-eu-1        # shown in every message
+       channels:
+         - name: platform
+           slack: {urlFile: /etc/kubeamber/notify-secrets/slack-url}
+         - name: oncall
+           teams: {urlFile: /etc/kubeamber/notify-secrets/teams-url}
+       routes:
+         - channels: [platform]  # everything
+         - channels: [oncall]    # only risky holds in production
+           events: [held, reminder]
+           minRisk: 60
+           namespaces: [prod, "prod-*"]
+   ```
+
+   With kustomize, edit [deploy/notify/notify.yaml](../deploy/notify/notify.yaml)
+   and run `kubectl apply -k deploy/notify`.
+
+**Routes** pick channels per message. A route matches when every field it sets
+matches: `events`, `minRisk`, `agents` and `namespaces` (globs). A message goes
+to the channels of every matching route, once each. Without routes, every
+channel gets every message.
+
+### Generic webhooks
+
+A `webhook` channel posts the message as JSON (`event`, `title`, `cluster`,
+`changeRequest`, `agent`, `user`, `owner`, `operation`, `kind`, `namespace`,
+`name`, `risk`, `summary`, `factors`, `intent`, `expiresAt`, `decidedBy`,
+`reason`, `source`, `ticket`, `ticketURL`), with an `X-KubeAmber-Event` header.
+Use it for PagerDuty, Opsgenie, email gateways or your own automation. Give it
+a `secretFile` and each body is signed: `X-KubeAmber-Signature: sha256=<hex>`
+is the HMAC-SHA256 of the body with that key, so the receiver can check the
+message really came from KubeAmber.
+
+### How delivery works
+
+- A message counts as sent only once the channel answers with a 2xx. A channel
+  that fails is retried on the next pass (every `interval`, default 15s)
+  without repeating the channels that succeeded.
+- What has been sent is kept in the `kubeamber-notify-state` ConfigMap, so a
+  restart repeats nothing. On its very first start the notifier does not replay
+  history: decided requests are marked as told, and pending ones are announced.
+- The approval TTL comes from the same policy file the webhook uses, so
+  "expired" means the same thing in both.
+- Run one replica (the chart and manifests use the `Recreate` strategy), or
+  everything would be sent twice.
+- Messages tell people how to decide; they don't decide. One-click approval
+  from chat needs a safe way to map a chat user to a Kubernetes identity, and
+  is planned.
+
+### Security
+
+- Webhook URLs are read from files on every send, so rotating the Secret needs
+  no restart. They never appear in logs or errors.
+- The agent writes its own intent, so that text is stripped of control
+  characters and cut to 300 characters, and Slack markup is escaped: an agent
+  cannot `@channel` people or disguise a link.
+- Messages carry change details (object names, risk factors, intent). Send them
+  to channels whose members may see that.
+- The notifier's service account can only read ChangeRequests, and write its
+  own state ConfigMap.
+
 ## ServiceNow change management
 
 `kubeamber bridge` connects held changes to ServiceNow Change Management, so

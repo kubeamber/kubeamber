@@ -47,6 +47,7 @@ can read.`,
 		decideCmd(&kf, "reject"),
 		mcpCmd(&kf),
 		bridgeCmd(&kf),
+		notifyCmd(&kf),
 		agentKubeconfigCmd(&kf),
 		&cobra.Command{
 			Use:   "version",

@@ -30,6 +30,7 @@ chart-lint: ## Lint the Helm chart and check its CRD matches deploy/
 	helm lint $(CHART) --set bridge.enabled=true --set webhook.tls.existingSecret=tls --set webhook.tls.certManagerCertificate=ns/cert
 	helm lint $(CHART) --set metrics.serviceMonitor.enabled=true --set metrics.serviceMonitor.labels.release=prometheus
 	helm lint $(CHART) --set metrics.enabled=false
+	helm lint $(CHART) --set notify.enabled=true --set 'notify.config.channels[0].name=platform' --set 'notify.config.channels[0].slack.urlFile=/etc/kubeamber/notify-secrets/slack-url'
 
 docker-build: ## Build the container image
 	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .

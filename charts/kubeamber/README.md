@@ -33,6 +33,7 @@ node, so the chart does not offer a DaemonSet.
 | ClusterRoles for approvers and viewers | `kubeamber-approver`, `kubeamber-viewer` |
 | Agents namespace (`agentsNamespace.create`), kept on uninstall | `kubeamber-agents` |
 | ServiceNow bridge (`bridge.enabled`) | `kubeamber-bridge` |
+| Notifier (`notify.enabled`) | `kubeamber-notify` |
 
 ## Values
 
@@ -59,6 +60,9 @@ node, so the chart does not offer a DaemonSet.
 | `bridge.enabled` | `false` | Run the ServiceNow change-management bridge. |
 | `bridge.credentialsSecret` | `kubeamber-servicenow` | Secret with `client-id`/`client-secret` or `username`/`password`. |
 | `bridge.config` | see `values.yaml` | The bridge configuration ([guide](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#servicenow-change-management)). |
+| `notify.enabled` | `false` | Run `kubeamber notify`: Slack, Teams or webhook messages about held changes and their outcomes. |
+| `notify.secretName` | `kubeamber-notify` | Secret with the webhook URLs, mounted at `/etc/kubeamber/notify-secrets`. |
+| `notify.config` | see `values.yaml` | Channels and routes ([guide](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#notifications-in-slack-teams-or-any-webhook)). |
 
 Every key is documented in [`values.yaml`](values.yaml).
 

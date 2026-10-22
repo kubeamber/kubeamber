@@ -61,6 +61,10 @@ Every verdict carries a reason the agent can read and act on.
   ServiceNow change requests. Your CAB approves there; the agent applies
   exactly that change in the approved window, and the ticket is closed with
   evidence. See [integrations](docs/integrations.md#servicenow-change-management).
+- **Tells people.** `kubeamber notify` posts to Slack, Microsoft Teams or any
+  webhook when a change is held, with the risk and the command to approve it,
+  and again when it is approved, rejected, applied or expires. See
+  [integrations](docs/integrations.md#notifications-in-slack-teams-or-any-webhook).
 - **Traceable.** Decisions are OpenTelemetry spans linked to the agent's own
   trace. They also appear in the Kubernetes audit log.
 
