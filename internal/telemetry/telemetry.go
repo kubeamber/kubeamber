@@ -47,16 +47,19 @@ func Setup(ctx context.Context, version string, scrape bool) (http.Handler, func
 	if !Enabled() && !scrape {
 		return nil, func(context.Context) error { return nil }, nil
 	}
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			attribute.String("service.name", "kubeamber"),
-			attribute.String("service.version", version),
-		),
-		resource.WithFromEnv(),
-		resource.WithHost(),
-	)
+	base := []attribute.KeyValue{
+		attribute.String("service.name", "kubeamber"),
+		attribute.String("service.version", version),
+	}
+	res, err := resource.New(ctx, resource.WithAttributes(base...), resource.WithFromEnv(), resource.WithHost())
 	if err != nil {
-		return nil, nil, err
+		// A malformed OTEL_RESOURCE_ATTRIBUTES or a failed detector costs only
+		// some attributes. Telemetry must never stop the webhook from starting,
+		// so report it and carry on with what was detected.
+		otel.Handle(err)
+		if res == nil {
+			res = resource.NewSchemaless(base...)
+		}
 	}
 
 	opts := []sdkmetric.Option{sdkmetric.WithResource(res)}

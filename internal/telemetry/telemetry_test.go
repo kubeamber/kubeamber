@@ -69,6 +69,20 @@ func TestSetupMetricsEndpointStartsNoTraceExporter(t *testing.T) {
 	}
 }
 
+func TestSetupSurvivesBadResourceAttributes(t *testing.T) {
+	noOTLP(t)
+	// A value without "=" is malformed; a platform may inject one like this.
+	t.Setenv("OTEL_RESOURCE_ATTRIBUTES", "team")
+	handler, shutdown, err := Setup(context.Background(), "test", true)
+	if err != nil {
+		t.Fatalf("telemetry must never stop the webhook from starting: %v", err)
+	}
+	defer func() { _ = shutdown(context.Background()) }()
+	if handler == nil {
+		t.Fatal("no metrics handler")
+	}
+}
+
 func TestSetupOffByDefault(t *testing.T) {
 	noOTLP(t)
 	handler, shutdown, err := Setup(context.Background(), "test", false)
