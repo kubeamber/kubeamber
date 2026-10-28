@@ -3,4 +3,4 @@
 #   uv pip compile website/requirements.in --universal --python-version 3.12 --generate-hashes -o website/requirements.txt
 # Stay on MkDocs 1.x: MkDocs 2.0 drops the plugin and hook system this site uses.
 mkdocs==1.6.1
-mkdocs-material==9.7.7
+mkdocs-material==9.8.0
