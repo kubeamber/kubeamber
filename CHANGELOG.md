@@ -83,6 +83,24 @@ include breaking changes, which are called out.
   Certificates from `--tls-cert-file` are reloaded too. Replicas updating the
   webhook configuration at the same time no longer log an error.
 
+### Security
+
+- Agents' subresource requests now reach KubeAmber. Before, an agent could add
+  a debug container to any pod (`kubectl debug`), approve a certificate
+  signing request for another identity, or proxy into pods, services and node
+  kubelets without review, because the webhook rule `"*"` does not match
+  subresources. The rules now match `*/*`, and these requests are scored:
+  ephemeral containers +35, CSR creation +25 and approval +45, `nodes/proxy`
+  +40 on top of the session, namespace finalizers +40
+  ([GHSA-9fh4-4cw7-36cw](https://github.com/kubeamber/kubeamber/security/advisories/GHSA-9fh4-4cw7-36cw)).
+- Agents could repoint the `kubeamber.dev` API group at a server of their
+  own by changing its APIService (`v1alpha1.kubeamber.dev`, which the API
+  server creates for the CRD). That server would then answer KubeAmber's reads
+  of ChangeRequests, approvals included. Self-protection now denies agents any
+  change to an APIService for the group, and other APIService changes score
+  +50, because they can feed the cluster false data
+  ([GHSA-6jmw-7398-fmpp](https://github.com/kubeamber/kubeamber/security/advisories/GHSA-6jmw-7398-fmpp)).
+
 ## [0.2.0] - 2026-10-21
 
 The first published release: signed container images, CLI binaries and the

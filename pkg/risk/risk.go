@@ -128,13 +128,30 @@ func operationFactors(a *Assessment, c Change) {
 }
 
 func kindFactors(a *Assessment, c Change) {
+	if c.Operation == "CONNECT" {
+		// The session is the risk (operationFactors); only a node's kubelet
+		// adds to it, because it reaches every pod on the node.
+		if c.GroupKind() == "Node" {
+			a.add(40, "reaches the node's kubelet, which can run commands in any pod on it")
+		}
+		return
+	}
 	del := c.Operation == "DELETE"
 	switch c.GroupKind() {
 	case "Namespace":
-		if del {
+		switch {
+		case del:
 			a.add(50, "deletes namespace %q and everything in it", c.Name)
-		} else {
+		case c.SubResource == "finalize":
+			a.add(40, "removes namespace %q's finalizers, which force-deletes what is left in it", c.Name)
+		default:
 			a.add(10, "changes a namespace")
+		}
+	case "certificates.k8s.io/CertificateSigningRequest":
+		if c.SubResource == "approval" {
+			a.add(45, "approves certificate signing request %s (whoever holds the certificate acts as its identity)", c.Name)
+		} else if c.Operation == "CREATE" {
+			a.add(25, "requests a client certificate for an identity")
 		}
 	case "apiextensions.k8s.io/CustomResourceDefinition":
 		if del {
@@ -153,6 +170,8 @@ func kindFactors(a *Assessment, c Change) {
 		"admissionregistration.k8s.io/MutatingAdmissionPolicy",
 		"admissionregistration.k8s.io/MutatingAdmissionPolicyBinding":
 		a.add(50, "changes admission control, which can switch off cluster safety checks")
+	case "apiregistration.k8s.io/APIService":
+		a.add(50, "changes which server answers an API group, which can feed the cluster false data")
 	case "Secret":
 		a.add(25, "touches a Secret")
 	case "Node":
@@ -182,7 +201,10 @@ func kindFactors(a *Assessment, c Change) {
 			a.add(45, "mints a credential for service account %s (whoever holds it acts as that identity)", c.Name)
 		}
 	case "Pod":
-		if del && hasController(c.OldObject) {
+		switch {
+		case c.SubResource == "ephemeralcontainers":
+			a.add(35, "adds an ephemeral container to running pod %s, much like opening a shell in it", c.Name)
+		case del && hasController(c.OldObject):
 			a.add(-20, "pod is managed by a controller and will be recreated")
 		}
 	}

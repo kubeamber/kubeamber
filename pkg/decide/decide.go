@@ -174,6 +174,10 @@ func (e *Engine) selfProtection(c risk.Change) string {
 		return "agents cannot modify KubeAmber's admission configuration"
 	case c.GroupKind() == "apiextensions.k8s.io/CustomResourceDefinition" && strings.HasSuffix(c.Name, ".kubeamber.dev"):
 		return "agents cannot modify KubeAmber's API definitions"
+	case c.GroupKind() == "apiregistration.k8s.io/APIService" && servesKubeAmber(c):
+		// Repointing the group at another server would let it answer
+		// KubeAmber's own reads, with approvals nobody gave.
+		return "agents cannot change which server answers KubeAmber's API"
 	case c.Group == "rbac.authorization.k8s.io" && (c.Name == "kubeamber" || strings.HasPrefix(c.Name, "kubeamber-")):
 		return "agents cannot modify KubeAmber's permissions"
 	case c.GroupKind() == "ServiceAccount" && c.SubResource == "" && annotation(c.Object, OwnerAnnotation) != annotation(c.OldObject, OwnerAnnotation):
@@ -185,6 +189,21 @@ func (e *Engine) selfProtection(c risk.Change) string {
 // OwnerAnnotation records, on an agent's service account, the person who
 // launched the agent (set by `kubeamber agent-kubeconfig`).
 const OwnerAnnotation = "kubeamber.dev/owner"
+
+// servesKubeAmber reports whether an APIService change concerns the
+// kubeamber.dev group, by name (version.group) or by spec.group.
+func servesKubeAmber(c risk.Change) bool {
+	if strings.HasSuffix(c.Name, ".kubeamber.dev") {
+		return true
+	}
+	for _, obj := range []map[string]any{c.Object, c.OldObject} {
+		spec, _ := obj["spec"].(map[string]any)
+		if g, _ := spec["group"].(string); g == "kubeamber.dev" || strings.HasSuffix(g, ".kubeamber.dev") {
+			return true
+		}
+	}
+	return false
+}
 
 func annotation(obj map[string]any, key string) string {
 	meta, _ := obj["metadata"].(map[string]any)

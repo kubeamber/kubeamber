@@ -8,9 +8,11 @@ var clusterScoped = map[string]bool{
 	"Node":             true,
 	"PersistentVolume": true,
 	"apiextensions.k8s.io/CustomResourceDefinition":                 true,
+	"apiregistration.k8s.io/APIService":                             true,
 	"rbac.authorization.k8s.io/ClusterRole":                         true,
 	"rbac.authorization.k8s.io/ClusterRoleBinding":                  true,
 	"storage.k8s.io/StorageClass":                                   true,
+	"certificates.k8s.io/CertificateSigningRequest":                 true,
 	"storage.k8s.io/CSIDriver":                                      true,
 	"scheduling.k8s.io/PriorityClass":                               true,
 	"networking.k8s.io/IngressClass":                                true,
@@ -36,11 +38,15 @@ func IsClusterScoped(group, kind string) bool {
 
 // parentKinds maps resources that expose a scale subresource to their kind.
 var parentKinds = map[string][2]string{
-	"deployments":     {"apps", "Deployment"},
-	"statefulsets":    {"apps", "StatefulSet"},
-	"replicasets":     {"apps", "ReplicaSet"},
-	"pods":            {"", "Pod"},
-	"serviceaccounts": {"", "ServiceAccount"},
+	"deployments":                {"apps", "Deployment"},
+	"statefulsets":               {"apps", "StatefulSet"},
+	"replicasets":                {"apps", "ReplicaSet"},
+	"pods":                       {"", "Pod"},
+	"serviceaccounts":            {"", "ServiceAccount"},
+	"services":                   {"", "Service"},
+	"nodes":                      {"", "Node"},
+	"namespaces":                 {"", "Namespace"},
+	"certificatesigningrequests": {"certificates.k8s.io", "CertificateSigningRequest"},
 }
 
 // ParentKind returns the group and kind of the resource a subresource request

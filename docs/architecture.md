@@ -170,9 +170,11 @@ power, for example an on-call group.
 
 ## Match conditions: agent traffic only
 
-The agents webhook matches CREATE, UPDATE and DELETE on every resource (`*`,
-`*/scale`, `pods/eviction`) and CONNECT on `pods/exec`, `pods/attach` and
-`pods/portforward`. It would be too
+The agents webhook matches CREATE, UPDATE and DELETE on every resource and
+every subresource (`*/*`: scale, eviction, token requests, ephemeral
+containers, certificate approvals, status, finalizers), and CONNECT on every
+core subresource (exec, attach, port-forward, and proxy into pods, services and
+nodes). It would be too
 expensive, and too risky, to put every request in the cluster through it.
 At startup and on every policy reload, KubeAmber regenerates a CEL match
 condition named `kubeamber-agents` from `spec.agents`:
@@ -217,6 +219,10 @@ change:
   Namespace object, including the policy ConfigMap and the TLS Secret;
 - targets admission configuration named `kubeamber` or `kubeamber-*`;
 - targets a CRD whose name ends in `.kubeamber.dev`;
+- targets an APIService for the `kubeamber.dev` group (by name or `spec.group`).
+  The API server creates a local `v1alpha1.kubeamber.dev` APIService for the
+  CRD; pointing it at another server would let that server answer
+  KubeAmber's own reads, approvals included;
 - targets RBAC objects named `kubeamber` or `kubeamber-*`;
 - creates, changes or deletes a service account whose `kubeamber.dev/owner`
   annotation would change, which would hijack or forge a developer's agent

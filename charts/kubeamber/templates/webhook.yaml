@@ -25,15 +25,21 @@ webhooks:
       - name: kubeamber-agents
         expression: {{ include "kubeamber.agentCondition" . | quote }}
     rules:
+      # Every resource and every subresource: scale, eviction, token
+      # requests, ephemeral containers, certificate approvals, status,
+      # finalizers. Subresources act like their parent, so they are reviewed
+      # like it.
       - operations: [CREATE, UPDATE, DELETE]
         apiGroups: ["*"]
         apiVersions: ["*"]
-        resources: ["*", "*/scale", "pods/eviction", "serviceaccounts/token"]
+        resources: ["*/*"]
         scope: "*"
+      # Interactive sessions and proxies: exec, attach, port-forward, and
+      # proxy into pods, services and nodes.
       - operations: [CONNECT]
         apiGroups: [""]
         apiVersions: [v1]
-        resources: [pods/exec, pods/attach, pods/portforward]
+        resources: ["*/*"]
   - name: changerequests.kubeamber.dev
     admissionReviewVersions: [v1]
     sideEffects: None

@@ -29,7 +29,7 @@ expected of CNCF projects.
 | An agent makes an accidental destructive change (deletes a namespace, scales production to zero, deletes a PVC) | Risk scoring holds or denies it, with reasons. Protected namespaces and critical labels raise the score. |
 | A prompt-injected agent tries a harmful change | The decision is deterministic and outside the agent; no text the agent sees or writes changes the score. The agent's stated intent is shown to the approver but does not lower the score. |
 | An agent escalates privileges through RBAC (binds itself to `cluster-admin`, edits roles) | RBAC kinds score +35 to +45 plus cluster scope; the example policy denies all RBAC changes by agents. |
-| An agent switches off safety controls (deletes webhooks or admission policies, including KubeAmber's) | Webhook configurations never reach webhooks, so the ValidatingAdmissionPolicy `kubeamber-protect-admission` (evaluated by the API server) denies agents any change to them. Built-in self-protection denies changes to KubeAmber's CRD, RBAC, namespace and ChangeRequests, whatever the policy says. See the limit on admission policies below. |
+| An agent switches off safety controls (deletes webhooks or admission policies, including KubeAmber's) | Webhook configurations never reach webhooks, so the ValidatingAdmissionPolicy `kubeamber-protect-admission` (evaluated by the API server) denies agents any change to them. Built-in self-protection denies changes to KubeAmber's CRD, the APIService that serves its API group, RBAC, namespace and ChangeRequests, whatever the policy says. See the limit on admission policies below. |
 | An agent edits KubeAmber's policy to loosen it | The policy ConfigMap lives in KubeAmber's namespace, which self-protection covers. |
 | An agent approves its own held change | Agents are denied any write to ChangeRequests. The requesting identity cannot approve its own request. `spec.approval.by` must equal the caller's username. |
 | An approval is reused for another change, or replayed later | Approvals are bound to a fingerprint of identity, operation, target and content. Each is consumed once under optimistic concurrency and expires after `approvals.ttl`. Post-dated approvals (clock skew > 2 minutes) are rejected. |
@@ -50,8 +50,9 @@ should cover them with other controls.
 - **Reads and data exfiltration.** Admission webhooks see writes, not `get`,
   `list` or `watch`. An agent with read access to Secrets can read them. Limit
   reads with RBAC, and watch the audit log.
-- **Effects inside workloads.** `exec` sessions are gated when they open
-  (CONNECT, +35), but KubeAmber does not see the commands run inside them.
+- **Effects inside workloads.** `exec`, `attach`, port-forward and proxy
+  sessions, and debug containers added with `kubectl debug`, are gated when
+  they open (+35), but KubeAmber does not see the commands run inside them.
   Anything a running pod does with its own credentials is out of scope.
 - **Agents with host or node access.** An agent that can reach the kubelet,
   container runtime, etcd or a node shell bypasses the API server and
