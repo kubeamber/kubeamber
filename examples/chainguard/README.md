@@ -202,6 +202,38 @@ $ kubectl -n shop create deployment ka --image=ghcr.io/kubeamber/kubeamber:v0.2.
 error: … failed policy: kubeamber-images: … signature keyless validation failed …
 ```
 
+### What the switch changed in KubeAmber's image
+
+linux/amd64, measured with syft and grype on 30 October 2026:
+
+| Release | Base | OS packages | Layers | Compressed | Known vulnerabilities |
+|---|---|---|---|---|---|
+| v0.2.0 | distroless (Debian) | 6 | 14 | 17.0 MB | 1 critical, 4 high, 2 unknown |
+| v0.3.0 | Chainguard `static` (Wolfi) | 3 | 2 | 17.0 MB | 1 critical, 4 high, 2 unknown |
+| v0.3.1 | Chainguard `static` (Wolfi) | 3 | 2 | 17.0 MB | none |
+
+The base had no known vulnerabilities in any release. All of them were in
+KubeAmber's own dependency, `golang.org/x/net` v0.59.0, and v0.3.1 fixes them
+(it also builds the CLI with Go 1.26.10). A minimal base removes OS packages;
+it doesn't fix application dependencies. That's why CI now also runs
+`govulncheck` (`make vulncheck`) on every change and weekly.
+
+Reproduce it for any release:
+
+```sh
+syft ghcr.io/kubeamber/kubeamber:v0.3.1 --platform linux/amd64
+grype ghcr.io/kubeamber/kubeamber:v0.3.1 --platform linux/amd64
+
+# Go vulnerabilities that the binary can reach:
+id=$(docker create --platform linux/amd64 ghcr.io/kubeamber/kubeamber:v0.3.1)
+docker cp "$id:/kubeamber" ./kubeamber && docker rm "$id"
+go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -mode=binary ./kubeamber
+```
+
+`chainctl images diff` produces this comparison for Chainguard's own images.
+It needs SBOM attestations signed with Sigstore, and KubeAmber's SBOMs are
+BuildKit attestations, so it doesn't work on KubeAmber's images yet.
+
 ## Part 4: build KubeAmber from source with melange and apko
 
 The release image comes from the repository's `Dockerfile`. Chainguard's own
