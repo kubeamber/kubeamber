@@ -29,7 +29,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: notify
-          image: ghcr.io/kubeamber/kubeamber:v0.2.0
+          image: ghcr.io/kubeamber/kubeamber:v0.3.0
           args: [notify, --config=/etc/kubeamber/notify/notify.yaml, --policy=/etc/kubeamber/policy/policy.yaml]
           env:
             - name: POD_NAMESPACE

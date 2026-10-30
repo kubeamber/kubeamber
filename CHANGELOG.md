@@ -7,6 +7,8 @@ include breaking changes, which are called out.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-30
+
 ### Added
 
 - Image provenance in the risk score, opt-in with the policy's `spec.images`:
@@ -178,5 +180,6 @@ the project started.
   KubeAmber now re-applies it every 30 seconds (`--resync-interval`), and the
   chart keeps the live value during upgrades.
 
-[Unreleased]: https://github.com/kubeamber/kubeamber/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kubeamber/kubeamber/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/kubeamber/kubeamber/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kubeamber/kubeamber/releases/tag/v0.2.0
