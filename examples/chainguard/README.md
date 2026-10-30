@@ -193,6 +193,53 @@ so this example doesn't add a ClusterImagePolicy for `ghcr.io/kubeamber`.
 Chainguard's images use the older signature format, which policy-controller
 reads.
 
+## Part 4: build KubeAmber from source with melange and apko
+
+The release image comes from the repository's `Dockerfile`. Chainguard's own
+toolchain can build the same binary without a Dockerfile:
+[melange](https://github.com/chainguard-dev/melange) compiles it into a
+signed Wolfi package, and [apko](https://github.com/chainguard-dev/apko)
+assembles a minimal image from packages and writes its SBOM. Both run from
+their free images. [melange.yaml](apko/melange.yaml) builds with Wolfi's
+`go-1.26`, the release `go.mod` asks for. Set `package.version` to the version
+you build.
+
+```sh
+cd examples/chainguard/apko
+ARCH=$(uname -m | sed 's/arm64/aarch64/')
+
+# A throwaway key to sign the local package (git-ignored).
+docker run --rm -v "$PWD":/work -w /work cgr.dev/chainguard/melange keygen
+
+# melange builds in a sandbox, so it needs --privileged.
+docker run --rm --privileged -v "$PWD":/work -v "$(git rev-parse --show-toplevel)":/src:ro -w /work \
+  cgr.dev/chainguard/melange build melange.yaml --source-dir /src --signing-key melange.rsa --arch "$ARCH"
+
+docker run --rm -v "$PWD":/work -w /work \
+  cgr.dev/chainguard/apko build apko.yaml kubeamber:apko kubeamber.tar --arch "$ARCH"
+docker load < kubeamber.tar
+```
+
+On Apple silicon the loaded image is `kubeamber:apko-arm64` (on Intel,
+`kubeamber:apko-amd64`). It is about 16 MB, runs as user 65532, and has no
+shell; [apko.yaml](apko/apko.yaml) lists everything in it, and the SBOM agrees:
+
+```console
+$ jq -r '.packages[].name' sbom-aarch64.spdx.json | grep -v -e '\.yaml$' -e '^sha256' | sort -u
+alpine/ca-certificates
+ca-certificates-bundle
+kubeamber
+wolfi
+wolfi-baselayout
+
+$ docker run --rm -v "$(git rev-parse --show-toplevel)/examples":/examples:ro kubeamber:apko-arm64 \
+    check --policy /examples/chainguard/policy.yaml -f /examples/chainguard/web-dockerhub.yaml --agent sre-agent
+HOLD   CREATE Deployment shop/web  risk 50/100
+…
+```
+
+Tested on Apple silicon (aarch64).
+
 ## Optional: with a Chainguard account
 
 Nothing above needs an account. If your organisation has one:

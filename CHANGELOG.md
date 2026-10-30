@@ -18,9 +18,10 @@ include breaking changes, which are called out.
   [docs/policy.md](docs/policy.md#specimages).
 - A Chainguard example ([examples/chainguard](examples/chainguard/README.md)):
   agents may deploy only Chainguard images pinned by digest (`spec.images`),
-  Sigstore policy-controller verifies Chainguard's signatures for everyone, and
-  how to verify KubeAmber's own base and release images. No Chainguard account
-  needed.
+  Sigstore policy-controller verifies Chainguard's signatures for everyone, how
+  to verify KubeAmber's own base and release images, and how to build KubeAmber
+  from source into a minimal Wolfi image with melange and apko. No Chainguard
+  account needed.
 - A kagent walkthrough ([examples/kagent](examples/kagent/README.md)) with
   screenshots of a kagent agent's changes being allowed, held, approved and
   denied, plus a KubeAmber-aware kagent Agent.
