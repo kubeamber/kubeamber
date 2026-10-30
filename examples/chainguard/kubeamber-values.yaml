@@ -1,0 +1,7 @@
+# Helm values for the Chainguard example. Helm merges this into the chart's
+# default policy, so only the images block is added.
+policy:
+  spec:
+    images:
+      trusted: ["cgr.dev/chainguard/*", "ghcr.io/kubeamber/*"]
+      requireDigest: true
