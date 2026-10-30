@@ -315,10 +315,11 @@ is configured.
   to the webhook's default 5-second timeout), `kubeamber.approval.wait` (histogram
   in seconds from hold to decision, by `kubeamber.decision` and
   `kubeamber.decision.source`) and `kubeamber.change_requests` (gauge, by
-  effective `kubeamber.phase`, read from the API server at collection time).
+  effective `kubeamber.phase`, read from the API server at collection time)
+  and `kubeamber.build.info` (always 1, with the `version` and `goversion`).
   Prometheus sees them as `kubeamber_decisions_total`, `kubeamber_risk_score`,
-  `kubeamber_review_duration_seconds`, `kubeamber_approval_wait_seconds` and
-  `kubeamber_change_requests`
+  `kubeamber_review_duration_seconds`, `kubeamber_approval_wait_seconds`,
+  `kubeamber_change_requests` and `kubeamber_build_info`
   ([integrations](integrations.md#prometheus-and-grafana-alloy)).
 - **Audit log**: admission responses carry audit annotations, which the API
   server records as `agents.kubeamber.dev/verdict`, `agents.kubeamber.dev/score`,

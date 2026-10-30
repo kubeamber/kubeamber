@@ -303,6 +303,7 @@ check "  ...and approvals in ServiceNow" allowed \
 check "change requests are counted by phase" allowed 'kubeamber_change_requests\{[^}]*kubeamber_phase="Pending"[^}]*\} [1-9]' -- scrape_all
 check "  ...used ones" allowed 'kubeamber_change_requests\{[^}]*kubeamber_phase="Consumed"[^}]*\} [1-9]' -- scrape_all
 check "  ...and rejected ones" allowed 'kubeamber_change_requests\{[^}]*kubeamber_phase="Rejected"[^}]*\} [1-9]' -- scrape_all
+check "each replica reports its version" allowed 'kubeamber_build_info\{goversion="go[0-9.]+",version="[^"]+"\} 1' -- scrape_all
 
 step "12. People hear about held changes in Slack, Teams or a webhook (simulated)"
 HOOK_ADDR=${HOOK_ADDR:-127.0.0.1:18081}

@@ -444,6 +444,7 @@ OTLP. Turn it off with `metrics.enabled=false` in the chart, or
 | `kubeamber_review_duration_seconds` | histogram, 5 ms to 5 s | `kubeamber_outcome` | How long KubeAmber took to review an agent change. The API server waits `webhook.timeoutSeconds` (5 by default) and then, with the default `failurePolicy: Fail`, refuses the change. |
 | `kubeamber_approval_wait_seconds` | histogram, 1 minute to 1 week | `kubeamber_decision` (`approved`, `rejected`), `kubeamber_decision_source` (`cluster`, or the change-management system, such as `servicenow`) | Time from a change being held to a person's decision on it, counted when KubeAmber admits the decision. Server-side dry runs are not counted. |
 | `kubeamber_change_requests` | gauge | `kubeamber_phase` (`Pending`, `Approved`, `Rejected`, `Consumed`, `Expired`) | Change requests in the cluster by effective phase: a pending request past its deadline, or an approval past `approvals.ttl`, counts as `Expired`. Listed from the API server on each scrape. |
+| `kubeamber_build_info` | gauge, always 1 | `version`, `goversion` | One series per running replica, whether metrics are scraped or pushed. Dashboards and alerts use it to find KubeAmber and to notice when no replica is running. |
 | `target_info` | gauge | `service_name`, `service_version`, `host_name` | One series per replica. |
 
 Go runtime and process metrics (`go_*`, `process_*`) are included. Each replica
