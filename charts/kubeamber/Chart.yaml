@@ -5,8 +5,8 @@ description: >-
   makes: routine changes go through, risky ones wait for a human, dangerous
   ones are denied.
 type: application
-version: 0.3.0
-appVersion: "v0.3.0"
+version: 0.3.1
+appVersion: "v0.3.1"
 kubeVersion: ">=1.30.0-0"
 home: https://github.com/kubeamber/kubeamber
 sources:
@@ -26,7 +26,7 @@ annotations:
       url: https://github.com/kubeamber/kubeamber/blob/main/docs/policy.md
   artifacthub.io/images: |
     - name: kubeamber
-      image: ghcr.io/kubeamber/kubeamber:v0.3.0
+      image: ghcr.io/kubeamber/kubeamber:v0.3.1
   artifacthub.io/crds: |
     - kind: ChangeRequest
       version: v1alpha1
