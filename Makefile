@@ -9,7 +9,9 @@ CHART   := charts/kubeamber
 CHAINGUARD_IDENTITY := https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main
 CHAINGUARD_ISSUER   := https://token.actions.githubusercontent.com
 
-.PHONY: build test lint fmt chart-sync chart-lint docker-build docker-build-local verify-base-images kind-up kind-deploy-helm kind-demo-helm kind-load kind-deploy kind-demo e2e kind-down clean
+GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.9.0
+
+.PHONY: build test lint vulncheck fmt chart-sync chart-lint docker-build docker-build-local verify-base-images kind-up kind-deploy-helm kind-demo-helm kind-load kind-deploy kind-demo e2e kind-down clean
 
 build: ## Build bin/kubeamber
 	go build -ldflags "$(LDFLAGS)" -o bin/kubeamber ./cmd/kubeamber
@@ -21,6 +23,9 @@ lint: ## go vet, gofmt and golangci-lint (if installed)
 	go vet ./...
 	@test -z "$$(gofmt -l .)" || (gofmt -l . && echo "run: make fmt" && exit 1)
 	@command -v golangci-lint >/dev/null && golangci-lint run || echo "golangci-lint not installed; skipped"
+
+vulncheck: ## Fail on known vulnerabilities that KubeAmber's code can reach (govulncheck)
+	go run $(GOVULNCHECK) ./...
 
 fmt:
 	gofmt -w .
