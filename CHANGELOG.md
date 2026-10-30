@@ -7,6 +7,13 @@ include breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Changed
+
+- [examples/chainguard](examples/chainguard/README.md) compares KubeAmber's
+  image across v0.2.0, v0.3.0 and v0.3.1 (OS packages, layers, size, known
+  vulnerabilities) and shows how to reproduce it with syft, grype and
+  govulncheck.
+
 ## [0.3.1] - 2026-10-30
 
 ### Changed
