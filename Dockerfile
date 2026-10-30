@@ -2,7 +2,7 @@
 # image (Wolfi, signed by Chainguard; see docs/releasing.md). The build stage
 # stays on golang:1.26 to match go.mod and CI: cgr.dev/chainguard/go is free
 # only as :latest, which is already the next Go release.
-FROM --platform=$BUILDPLATFORM golang:1.26@sha256:3745f1aa11822297b79113f5e84ce2bffeb039734571c39855809cfe9e5d7be6 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26@sha256:670bb5aa5349ae03b8516764718486f4f16399134bdc9acd0c46a23f043ab05c AS build
 ARG TARGETOS TARGETARCH VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
