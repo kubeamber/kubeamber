@@ -23,6 +23,11 @@ include breaking changes, which are called out.
   GO-2026-6612 (critical), GO-2026-6603, GO-2026-6610, GO-2026-6611 and
   GO-2026-6617 (high). Two more in its HTML parser (GO-2026-6860,
   GO-2026-6866) were present but not reachable.
+- The CLI binaries of v0.3.0 and earlier were built with Go 1.26.0, whose
+  standard library has vulnerabilities KubeAmber reaches (for example
+  GO-2026-6617 in `net/http`, GO-2026-6809 in `crypto/x509`). `go.mod` now
+  sets `toolchain go1.26.10`, which CI and the release workflow use. The
+  container images were already built with Go 1.26.10.
 
 ## [0.3.0] - 2026-10-30
 

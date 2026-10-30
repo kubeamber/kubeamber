@@ -2,6 +2,8 @@ module github.com/kubeamber/kubeamber
 
 go 1.26.0
 
+toolchain go1.26.10
+
 require (
 	cel.dev/cel-go v0.32.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
