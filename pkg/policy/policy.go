@@ -72,6 +72,9 @@ type Spec struct {
 	// ProtectedNamespaces are glob patterns for namespaces where changes
 	// carry extra risk.
 	ProtectedNamespaces []string `json:"protectedNamespaces,omitempty"`
+	// Images adds where container images come from to the risk score. Off
+	// unless set.
+	Images Images `json:"images,omitempty"`
 	// Rules are evaluated in order; the first match applies.
 	Rules []Rule `json:"rules,omitempty"`
 	// FreezeWindows hold or deny agent changes during set periods.
@@ -91,6 +94,19 @@ type Agent struct {
 	Groups []string `json:"groups,omitempty"`
 	// ServiceAccounts are "namespace/name" pairs; name may be "*".
 	ServiceAccounts []string `json:"serviceAccounts,omitempty"`
+}
+
+// Images scores the images a change adds to a pod spec, so an agent that
+// swaps in an image from an unknown source, or one a tag can silently move,
+// needs a human.
+type Images struct {
+	// Trusted are glob patterns for image repositories, without tag or
+	// digest, e.g. "cgr.dev/chainguard/*". Docker Hub short names are
+	// expanded first ("nginx" is docker.io/library/nginx). Empty turns the
+	// untrusted-image factor off.
+	Trusted []string `json:"trusted,omitempty"`
+	// RequireDigest scores images that are not pinned by digest.
+	RequireDigest bool `json:"requireDigest,omitempty"`
 }
 
 type Thresholds struct {
@@ -268,6 +284,12 @@ func (p *Policy) validate() error {
 	if t.Hold < 1 || t.Hold > 100 || t.Deny < t.Hold || t.Deny > 101 {
 		return fmt.Errorf("spec.thresholds: need 1 <= hold (%d) <= deny (%d) <= 101", t.Hold, t.Deny)
 	}
+	for i, repo := range s.Images.Trusted {
+		last := repo[strings.LastIndex(repo, "/")+1:]
+		if repo == "" || strings.Contains(repo, "@") || strings.Contains(last, ":") {
+			return fmt.Errorf("spec.images.trusted[%d]: %q must be an image repository without tag or digest, e.g. cgr.dev/chainguard/*", i, repo)
+		}
+	}
 	for i, r := range s.Rules {
 		if r.Name == "" {
 			return fmt.Errorf("spec.rules[%d]: name is required", i)
@@ -368,6 +390,11 @@ func ServiceAccountUsername(sa string) string {
 // IsProtectedNamespace reports whether ns matches spec.protectedNamespaces.
 func (p *Policy) IsProtectedNamespace(ns string) bool {
 	return ns != "" && GlobAny(p.Spec.ProtectedNamespaces, ns)
+}
+
+// TrustedImage reports whether an image repository matches spec.images.trusted.
+func (p *Policy) TrustedImage(repository string) bool {
+	return GlobAny(p.Spec.Images.Trusted, repository)
 }
 
 // Matches reports whether the rule selects a change.

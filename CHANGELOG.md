@@ -9,6 +9,13 @@ include breaking changes, which are called out.
 
 ### Added
 
+- Image provenance in the risk score, opt-in with the policy's `spec.images`:
+  an image a change adds from a repository outside `trusted` scores +30, and
+  with `requireDigest` one not pinned by digest scores +10, so an agent that
+  swaps in an unknown or movable image needs a human. Scores don't change
+  unless `spec.images` is set. `kubeamber check` and MCP previews apply it too,
+  and the MCP `kubeamber_policy` tool lists the trusted repositories. See
+  [docs/policy.md](docs/policy.md#specimages).
 - A kagent walkthrough ([examples/kagent](examples/kagent/README.md)) with
   screenshots of a kagent agent's changes being allowed, held, approved and
   denied, plus a KubeAmber-aware kagent Agent.

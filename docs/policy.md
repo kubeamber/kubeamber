@@ -15,6 +15,7 @@ spec:
   agents: [...]               # required
   thresholds: {hold: 30, deny: 80}
   protectedNamespaces: [...]
+  images: {trusted: [...], requireDigest: true}
   rules: [...]
   freezeWindows: [...]
   approvals: {ttl: 15m, pendingTTL: 1h}
@@ -87,6 +88,30 @@ agents:
 
 `[]glob`. Changes in these namespaces (or to these Namespace objects) score
 +25. Typical: `["kube-system", "kube-public", "prod", "prod-*"]`.
+
+## `spec.images`
+
+Adds where container images come from to the risk score. Off unless set. Only
+images a change adds to a pod spec are scored; see
+[risk-model.md](risk-model.md#images-opt-in).
+
+| Field | Type | Description |
+|---|---|---|
+| `trusted` | []glob | Image repositories, without tag or digest, that add no risk. An added image from any other repository scores +30. Docker Hub short names are expanded before matching (`nginx` is `docker.io/library/nginx`). Empty turns this factor off. |
+| `requireDigest` | bool | An added image that is not pinned by digest (`image@sha256:…`) scores +10. |
+
+For example, agents may run Chainguard's images and KubeAmber's own, pinned by
+digest, without a human; anything else is held:
+
+```yaml
+images:
+  trusted: ["cgr.dev/chainguard/*", "ghcr.io/kubeamber/*"]
+  requireDigest: true
+```
+
+KubeAmber checks where an image comes from, not that it is genuine. To verify
+signatures at admission for everyone, pair it with a signature policy such as
+Sigstore's policy-controller.
 
 ## `spec.rules`
 
