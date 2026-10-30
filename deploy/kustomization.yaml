@@ -8,7 +8,7 @@ resources:
   - admission-policy.yaml
 configMapGenerator:
   # Edit policy.yaml (or patch it in an overlay); KubeAmber reloads it within
-  # seconds of the ConfigMap changing.
+  # about a minute of the ConfigMap changing, without restarting.
   - name: kubeamber-policy
     namespace: kubeamber-system
     files: [policy.yaml]

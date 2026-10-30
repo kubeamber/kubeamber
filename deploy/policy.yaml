@@ -36,21 +36,22 @@ spec:
         kinds: [Role, RoleBinding, ClusterRole, ClusterRoleBinding]
       action: deny
       reason: agents may not change RBAC, because that would let them grant themselves more power
-    - name: scratch-namespaces
-      match:
-        namespaces: ["sandbox-*"]
-      action: allow
-      reason: agents may experiment freely in sandbox namespaces
+    # Let agents experiment freely in sandbox namespaces:
+    # - name: scratch-namespaces
+    #   match:
+    #     namespaces: ["sandbox-*"]
+    #   action: allow
+    #   reason: agents may experiment freely in sandbox namespaces
 
-  # No unattended agent changes to production on Friday evenings.
-  freezeWindows:
-    - name: friday-evening
-      days: [Fri]
-      start: "17:00"
-      end: "24:00"
-      timeZone: Asia/Kolkata
-      namespaces: ["prod", "prod-*"]
-      action: hold
+  # No unattended agent changes to production on Friday evenings:
+  # freezeWindows:
+  #   - name: friday-evening
+  #     days: [Fri]
+  #     start: "17:00"
+  #     end: "24:00"
+  #     timeZone: Europe/London
+  #     namespaces: ["prod", "prod-*"]
+  #     action: hold
 
   approvals:
     # An approved change must be retried within this time.
