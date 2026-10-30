@@ -62,6 +62,16 @@ cosign verify ghcr.io/kubeamber/charts/kubeamber:0.2.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
+Base image: the runtime image is built on `cgr.dev/chainguard/static`, which
+Chainguard signs with Sigstore keyless signing from GitHub Actions. Check the
+digest the `Dockerfile` pins:
+
+```sh
+cosign verify "$(grep -o 'cgr.dev/chainguard/static[^ ]*' Dockerfile)" \
+  --certificate-identity https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
 SBOM and provenance:
 
 ```sh

@@ -38,6 +38,11 @@ include breaking changes, which are called out.
 
 ### Changed
 
+- The container image is built on Chainguard's `cgr.dev/chainguard/static`
+  (Wolfi-based, signed by Chainguard) instead of `gcr.io/distroless/static`.
+  It still runs as the non-root user 65532. The image for local kind runs uses
+  the same base and digest; it had fallen behind the release image.
+  [docs/releasing.md](docs/releasing.md) shows how to verify the base image.
 - The logo artwork kit and its generator are no longer kept in the repository;
   the README logo and chart icon are in `docs/images/`.
 
