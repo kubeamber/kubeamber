@@ -32,4 +32,8 @@ jobs:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "$TOKEN" | cosign login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          cosign sign --yes "ghcr.io/kubeamber/charts/kubeamber@${{ steps.push.outputs.digest }}"
+          # cosign 3's bundle, plus the legacy .sig tag for verifiers that
+          # don't read bundles yet (see release.yaml).
+          chart="ghcr.io/kubeamber/charts/kubeamber@${{ steps.push.outputs.digest }}"
+          cosign sign --yes "$chart"
+          cosign sign --yes --new-bundle-format=false --use-signing-config=false "$chart"

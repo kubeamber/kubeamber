@@ -48,6 +48,11 @@ include breaking changes, which are called out.
 
 ### Fixed
 
+- Admission verifiers couldn't verify KubeAmber's image or chart: cosign 3
+  signs in its new bundle format, stored as an OCI 1.1 referrer, and Sigstore
+  policy-controller (up to v0.15.1) reports `no signatures found` for it.
+  Releases are now also signed in the legacy `.sig` format, which
+  policy-controller reads; `cosign verify` accepts either.
 - The kagent integration guide matched `kagent/*`, which also reviewed the
   kagent controller. It now matches the tool server's service account,
   `kagent/kagent-tools`.
