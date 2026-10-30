@@ -1,0 +1,28 @@
+# Builds KubeAmber from this repository's source as a Wolfi package, with
+# melange. Run from the repository root; see examples/chainguard/README.md.
+package:
+  name: kubeamber
+  version: 0.0.0
+  epoch: 0
+  description: "KubeAmber: traffic lights for AI agents on Kubernetes"
+  copyright:
+    - license: Apache-2.0
+
+environment:
+  contents:
+    keyring:
+      - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+    repositories:
+      - https://packages.wolfi.dev/os
+    packages:
+      - busybox
+      - ca-certificates-bundle
+      # The Go release go.mod asks for.
+      - go-1.26
+
+pipeline:
+  - uses: go/build
+    with:
+      packages: ./cmd/kubeamber
+      output: kubeamber
+      ldflags: -X github.com/kubeamber/kubeamber/internal/version.Version=melange
