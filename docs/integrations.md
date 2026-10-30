@@ -535,3 +535,70 @@ webhook:
 
 The same works for any OTLP receiver, such as Alloy's `otelcol.receiver.otlp`
 or an OpenTelemetry Collector.
+
+### Grafana dashboard
+
+The chart ships a Grafana dashboard: what agents changed and what KubeAmber
+decided, held changes waiting for a person and how long decisions take, and
+the webhook's latency and replicas.
+
+![The KubeAmber Grafana dashboard](images/grafana-dashboard.png)
+
+With Grafana's dashboard sidecar, which kube-prometheus-stack and the
+`grafana` chart run, let the chart create the dashboard's ConfigMap:
+
+```sh
+helm upgrade kubeamber oci://ghcr.io/kubeamber/charts/kubeamber -n kubeamber-system --reuse-values \
+  --set metrics.grafanaDashboard.enabled=true
+```
+
+The ConfigMap carries the sidecar's default label, `grafana_dashboard: "1"`.
+kube-prometheus-stack's sidecar finds it in any namespace; a sidecar that only
+watches its own namespace needs `metrics.grafanaDashboard.namespace` set to
+it. To put the dashboard in a folder, set the sidecar's `folderAnnotation`
+and `metrics.grafanaDashboard.annotations` to match, for example
+`grafana_folder: KubeAmber`.
+
+Without the sidecar, import
+[`grafana-dashboard.json`](https://github.com/kubeamber/kubeamber/blob/main/charts/kubeamber/files/grafana-dashboard.json)
+in Grafana (**Dashboards → New → Import**). Pick the Prometheus data source in
+the dashboard's **Data source** list.
+
+| Row | Panels |
+|---|---|
+| Headline | Changes waiting for a person now, changes allowed, held and denied in the time range, the 99th percentile review time, and the median wait for a decision. |
+| Agent decisions | Decisions over time by outcome, the spread of risk scores, and each agent's decisions. Filtered by the **Agent** list. |
+| Held changes | Changes waiting for a decision or for the agent's retry, and the approvals and rejections made in the cluster or in ServiceNow, with how long they took. |
+| Webhook | Review time percentiles, replicas by version, and each replica's memory and CPU. |
+
+Allowed is green, held amber and denied red throughout, like the project's
+traffic lights; approved retries are blue and rejected ones purple. The
+colours were checked for colour-blind readers, and every chart has a legend
+or table with the values.
+
+### Alert rules
+
+The chart can also create a PrometheusRule (for the Prometheus Operator) with
+these alerts:
+
+| Alert | Severity | Fires when | What to do |
+|---|---|---|---|
+| `KubeAmberWebhookDown` | critical | No webhook replica has reported metrics for 5 minutes. | Agents' changes and approvals fail while the webhook is down (`failurePolicy: Fail`); people's own changes are not affected. Check the pods in KubeAmber's namespace. |
+| `KubeAmberReviewsSlow` | warning | The 99th percentile review time is over 2.5 seconds for 10 minutes. | The API server refuses changes after 5 seconds by default. Look at slow Prometheus guards in the policy and the API server's latency. |
+| `KubeAmberAgentDeniedRepeatedly` | warning | An agent had 5 or more changes denied in 15 minutes. | The agent may be stuck in a loop or working around its instructions: `kubectl get events -A --field-selector reason=AgentChangeDenied`. |
+| `KubeAmberChangesWaiting` | info | Held changes have been waiting for a person for 30 minutes. | `kubeamber list`, then approve or reject. Unanswered requests expire after `approvals.pendingTTL`. |
+
+```sh
+helm upgrade kubeamber oci://ghcr.io/kubeamber/charts/kubeamber -n kubeamber-system --reuse-values \
+  --set metrics.prometheusRule.enabled=true --set metrics.prometheusRule.labels.release=prometheus
+```
+
+Set `labels` to whatever your Prometheus selects rules by; kube-prometheus-stack
+selects `release: <its release name>`. `metrics.prometheusRule.ruleLabels` adds
+labels to every alert, for example to route them to a team, and
+`metrics.prometheusRule.disabled` leaves alerts out by name. To change a
+threshold, disable the alert and add your own copy.
+
+Without the operator, the same rules are a plain Prometheus rule file,
+[`prometheus-rules.yaml`](https://github.com/kubeamber/kubeamber/blob/main/charts/kubeamber/files/prometheus-rules.yaml),
+to load with `rule_files`. `make rules-test` checks them with promtool.

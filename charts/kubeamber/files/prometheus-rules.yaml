@@ -1,0 +1,67 @@
+# KubeAmber's alert rules, in Prometheus rule-file format. The chart wraps
+# them in a PrometheusRule (metrics.prometheusRule.enabled); without the
+# Prometheus Operator, load this file with rule_files. Tested by
+# `make rules-test` (hack/prometheus-rules-test.yaml).
+groups:
+  - name: kubeamber
+    rules:
+      - alert: KubeAmberWebhookDown
+        expr: absent(kubeamber_build_info)
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: No KubeAmber webhook replica is reporting metrics.
+          description: >-
+            Prometheus has had no metrics from any KubeAmber webhook replica
+            for 5 minutes. While none is reachable, the API server refuses
+            agents' changes and approvals of held changes (failurePolicy:
+            Fail). People's own changes are not affected. Check the pods in
+            KubeAmber's namespace.
+          runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules
+
+      - alert: KubeAmberReviewsSlow
+        expr: >-
+          histogram_quantile(0.99,
+            sum without (instance, pod, kubeamber_outcome) (rate(kubeamber_review_duration_seconds_bucket[5m]))
+          ) > 2.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: KubeAmber's reviews are close to the webhook timeout.
+          description: >-
+            1% of agent changes took longer than {{ $value | humanizeDuration }}
+            to review over the last 5 minutes. The API server waits 5 seconds
+            by default and then refuses the change. Slow Prometheus guards in
+            the policy, or a slow API server, are the usual causes.
+          runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules
+
+      - alert: KubeAmberAgentDeniedRepeatedly
+        expr: >-
+          sum without (instance, pod) (increase(kubeamber_decisions_total{kubeamber_outcome="deny"}[15m])) >= 5
+        labels:
+          severity: warning
+        annotations:
+          summary: Agent {{ $labels.gen_ai_agent_name }} keeps trying changes KubeAmber denies.
+          description: >-
+            {{ $labels.gen_ai_agent_name }} had {{ $value | humanize }} changes
+            denied in 15 minutes. An agent that retries denied changes may be
+            stuck in a loop or working around its instructions. See what it
+            tried with
+            kubectl get events -A --field-selector reason=AgentChangeDenied.
+          runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules
+
+      - alert: KubeAmberChangesWaiting
+        expr: max without (instance, pod) (kubeamber_change_requests{kubeamber_phase="Pending"}) > 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: Agent changes have been waiting for a person for 30 minutes.
+          description: >-
+            Held agent changes have been waiting for someone to approve or
+            reject them for at least 30 minutes; {{ $value }} are waiting now.
+            List them with kubeamber list. Unanswered requests expire after
+            approvals.pendingTTL (1 hour by default).
+          runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules

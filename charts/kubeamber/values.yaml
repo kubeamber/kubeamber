@@ -58,6 +58,29 @@ metrics:
     interval: 30s
     # Labels your Prometheus selects ServiceMonitors by, e.g. release: prometheus.
     labels: {}
+  # Create a PrometheusRule with KubeAmber's alerts (its CRD must exist):
+  # webhook down, reviews near the timeout, an agent denied repeatedly, and
+  # changes waiting for a person. The rules are in files/prometheus-rules.yaml.
+  prometheusRule:
+    enabled: false
+    # Labels your Prometheus selects rules by, e.g. release: prometheus.
+    labels: {}
+    # Labels added to every alert, e.g. team: platform. They override the
+    # rules' own labels, including severity.
+    ruleLabels: {}
+    # Alerts to leave out, by name, e.g. [KubeAmberChangesWaiting].
+    disabled: []
+  # Create a ConfigMap holding the KubeAmber Grafana dashboard, for Grafana's
+  # dashboard sidecar (kube-prometheus-stack and the grafana chart run one).
+  grafanaDashboard:
+    enabled: false
+    # Namespace the sidecar watches (default: the release namespace).
+    namespace: ""
+    # The label the sidecar looks for (its `sidecar.dashboards.label`).
+    labels:
+      grafana_dashboard: "1"
+    # E.g. grafana_folder: KubeAmber, with the sidecar's folderAnnotation.
+    annotations: {}
 
 # Block agents from changing admission webhooks, which Kubernetes never sends
 # to webhooks for review (docs/architecture.md). Strongly recommended.

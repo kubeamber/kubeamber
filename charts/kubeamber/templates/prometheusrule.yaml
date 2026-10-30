@@ -1,0 +1,29 @@
+{{- /* dig: values reused from a release older than this setting lack it. */}}
+{{- if and .Values.metrics.enabled (dig "prometheusRule" "enabled" false .Values.metrics) }}
+{{- $cfg := .Values.metrics.prometheusRule }}
+{{- $file := .Files.Get "files/prometheus-rules.yaml" | fromYaml }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kubeamber
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "kubeamber.labels" . | nindent 4 }}
+    app.kubernetes.io/name: kubeamber
+    {{- with $cfg.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    {{- range $file.groups }}
+    - name: {{ .name }}
+      rules:
+        {{- range .rules }}
+        {{- if not (has .alert $cfg.disabled) }}
+        {{- $rule := deepCopy . }}
+        {{- $_ := set $rule "labels" (merge (deepCopy ($cfg.ruleLabels | default dict)) ($rule.labels | default dict)) }}
+        - {{ toYaml $rule | nindent 10 | trim }}
+        {{- end }}
+        {{- end }}
+    {{- end }}
+{{- end }}

@@ -10,8 +10,10 @@ CHAINGUARD_IDENTITY := https://github.com/chainguard-images/images/.github/workf
 CHAINGUARD_ISSUER   := https://token.actions.githubusercontent.com
 
 GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.9.0
+# promtool, for the chart's alert rules.
+PROMETHEUS_IMAGE := prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
 
-.PHONY: build test lint vulncheck fmt chart-sync chart-lint docker-build docker-build-local verify-base-images kind-up kind-deploy-helm kind-demo-helm kind-load kind-deploy kind-demo e2e kind-down clean
+.PHONY: build test lint vulncheck fmt chart-sync chart-lint rules-test docker-build docker-build-local verify-base-images kind-up kind-deploy-helm kind-demo-helm kind-load kind-deploy kind-demo e2e kind-down clean
 
 build: ## Build bin/kubeamber
 	go build -ldflags "$(LDFLAGS)" -o bin/kubeamber ./cmd/kubeamber
@@ -38,8 +40,14 @@ chart-lint: ## Lint the Helm chart and check its CRD matches deploy/
 	helm lint $(CHART)
 	helm lint $(CHART) --set bridge.enabled=true --set webhook.tls.existingSecret=tls --set webhook.tls.certManagerCertificate=ns/cert
 	helm lint $(CHART) --set metrics.serviceMonitor.enabled=true --set metrics.serviceMonitor.labels.release=prometheus
+	helm lint $(CHART) --set metrics.prometheusRule.enabled=true --set metrics.prometheusRule.ruleLabels.team=platform --set 'metrics.prometheusRule.disabled={KubeAmberChangesWaiting}' --set metrics.grafanaDashboard.enabled=true --set metrics.grafanaDashboard.annotations.grafana_folder=KubeAmber
+	@jq -e '.uid == "kubeamber" and (.panels | length > 0)' $(CHART)/files/grafana-dashboard.json >/dev/null || (echo "$(CHART)/files/grafana-dashboard.json is not a valid dashboard" && exit 1)
 	helm lint $(CHART) --set metrics.enabled=false
 	helm lint $(CHART) --set notify.enabled=true --set 'notify.config.channels[0].name=platform' --set 'notify.config.channels[0].slack.urlFile=/etc/kubeamber/notify-secrets/slack-url'
+
+rules-test: ## Check the chart's alert rules and run their unit tests with promtool (needs Docker)
+	docker run --rm -v "$(CURDIR):/work:ro" -w /work --entrypoint promtool $(PROMETHEUS_IMAGE) check rules $(CHART)/files/prometheus-rules.yaml
+	docker run --rm -v "$(CURDIR):/work:ro" -w /work --entrypoint promtool $(PROMETHEUS_IMAGE) test rules hack/prometheus-rules-test.yaml
 
 docker-build: ## Build the container image
 	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE) .

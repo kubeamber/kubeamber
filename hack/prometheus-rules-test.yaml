@@ -1,0 +1,120 @@
+# Unit tests for the chart's alert rules: make rules-test.
+rule_files:
+  - ../charts/kubeamber/files/prometheus-rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  - name: the webhook disappears from Prometheus
+    interval: 1m
+    input_series:
+      # Scraped for 10 minutes, then gone: stale 5 minutes later, alert 5
+      # minutes after that.
+      - series: 'kubeamber_build_info{job="kubeamber", instance="10.0.0.1:9090", version="v0.3.1", goversion="go1.26.10"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: KubeAmberWebhookDown
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: KubeAmberWebhookDown
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: No KubeAmber webhook replica is reporting metrics.
+              description: "Prometheus has had no metrics from any KubeAmber webhook replica for 5 minutes. While none is reachable, the API server refuses agents' changes and approvals of held changes (failurePolicy: Fail). People's own changes are not affected. Check the pods in KubeAmber's namespace."
+              runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules
+
+  - name: reviews slow down for two replicas
+    interval: 1m
+    input_series:
+      # 30 reviews a minute on each replica, all between 2.5 and 5 seconds.
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="a", kubeamber_outcome="hold", le="1"}'
+        values: '0x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="a", kubeamber_outcome="hold", le="2.5"}'
+        values: '0x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="a", kubeamber_outcome="hold", le="5"}'
+        values: '0+30x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="a", kubeamber_outcome="hold", le="+Inf"}'
+        values: '0+30x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="b", kubeamber_outcome="allow", le="1"}'
+        values: '0x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="b", kubeamber_outcome="allow", le="2.5"}'
+        values: '0x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="b", kubeamber_outcome="allow", le="5"}'
+        values: '0+30x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="b", kubeamber_outcome="allow", le="+Inf"}'
+        values: '0+30x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KubeAmberReviewsSlow
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: KubeAmberReviewsSlow
+        exp_alerts:
+          - exp_labels: {severity: warning, job: kubeamber}
+            exp_annotations:
+              summary: KubeAmber's reviews are close to the webhook timeout.
+              description: 1% of agent changes took longer than 4.975s to review over the last 5 minutes. The API server waits 5 seconds by default and then refuses the change. Slow Prometheus guards in the policy, or a slow API server, are the usual causes.
+              runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules
+
+  - name: fast reviews raise nothing
+    interval: 1m
+    input_series:
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="a", kubeamber_outcome="hold", le="0.05"}'
+        values: '0+30x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="a", kubeamber_outcome="hold", le="5"}'
+        values: '0+30x30'
+      - series: 'kubeamber_review_duration_seconds_bucket{job="kubeamber", instance="a", kubeamber_outcome="hold", le="+Inf"}'
+        values: '0+30x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: KubeAmberReviewsSlow
+        exp_alerts: []
+
+  - name: one agent keeps being denied
+    interval: 1m
+    input_series:
+      # sre-agent is denied once a minute; ci-bot once in 20 minutes; both
+      # are allowed often.
+      - series: 'kubeamber_decisions_total{job="kubeamber", instance="a", gen_ai_agent_name="sre-agent", kubeamber_outcome="deny"}'
+        values: '0+1x20'
+      - series: 'kubeamber_decisions_total{job="kubeamber", instance="a", gen_ai_agent_name="ci-bot", kubeamber_outcome="deny"}'
+        values: '0x10 1x10'
+      - series: 'kubeamber_decisions_total{job="kubeamber", instance="a", gen_ai_agent_name="ci-bot", kubeamber_outcome="allow"}'
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: KubeAmberAgentDeniedRepeatedly
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: KubeAmberAgentDeniedRepeatedly
+        exp_alerts:
+          - exp_labels: {severity: warning, job: kubeamber, gen_ai_agent_name: sre-agent, kubeamber_outcome: deny}
+            exp_annotations:
+              summary: Agent sre-agent keeps trying changes KubeAmber denies.
+              description: sre-agent had 15 changes denied in 15 minutes. An agent that retries denied changes may be stuck in a loop or working around its instructions. See what it tried with kubectl get events -A --field-selector reason=AgentChangeDenied.
+              runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules
+
+  - name: held changes wait for a person
+    interval: 1m
+    input_series:
+      # Every replica reports the cluster-wide count.
+      - series: 'kubeamber_change_requests{job="kubeamber", instance="a", kubeamber_phase="Pending"}'
+        values: '0x5 2x45'
+      - series: 'kubeamber_change_requests{job="kubeamber", instance="b", kubeamber_phase="Pending"}'
+        values: '0x5 2x45'
+      - series: 'kubeamber_change_requests{job="kubeamber", instance="a", kubeamber_phase="Consumed"}'
+        values: '9x50'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: KubeAmberChangesWaiting
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: KubeAmberChangesWaiting
+        exp_alerts:
+          - exp_labels: {severity: info, job: kubeamber, kubeamber_phase: Pending}
+            exp_annotations:
+              summary: Agent changes have been waiting for a person for 30 minutes.
+              description: Held agent changes have been waiting for someone to approve or reject them for at least 30 minutes; 2 are waiting now. List them with kubeamber list. Unanswered requests expire after approvals.pendingTTL (1 hour by default).
+              runbook_url: https://kubeamber.github.io/kubeamber/integrations/#alert-rules

@@ -26,6 +26,8 @@ node, so the chart does not offer a DaemonSet.
 |---|---|
 | Webhook Deployment, Service, PodDisruptionBudget | `kubeamber` |
 | ServiceMonitor (`metrics.serviceMonitor.enabled`) | `kubeamber` |
+| PrometheusRule with alerts (`metrics.prometheusRule.enabled`) | `kubeamber` |
+| Grafana dashboard ConfigMap (`metrics.grafanaDashboard.enabled`) | `kubeamber-grafana-dashboard` |
 | ValidatingWebhookConfiguration | `kubeamber` |
 | ValidatingAdmissionPolicy and binding (`admissionPolicy.enabled`) | `kubeamber-protect-admission` |
 | ChangeRequest CRD (`crds.install`), kept on uninstall | `changerequests.kubeamber.dev` |
@@ -53,6 +55,10 @@ node, so the chart does not offer a DaemonSet.
 | `metrics.scrapeAnnotations` | `true` | Add `prometheus.io/scrape`, `/port` and `/path` pod annotations. |
 | `metrics.serviceMonitor.enabled` | `false` | Create a Prometheus Operator ServiceMonitor (needs its CRD). |
 | `metrics.serviceMonitor.interval` / `.labels` | `30s` / `{}` | Scrape interval, and labels your Prometheus selects ServiceMonitors by. |
+| `metrics.prometheusRule.enabled` | `false` | Create a PrometheusRule with KubeAmber's [alerts](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#alert-rules) (needs its CRD). |
+| `metrics.prometheusRule.labels` / `.ruleLabels` / `.disabled` | `{}` / `{}` / `[]` | Labels your Prometheus selects rules by; labels added to every alert (they win over the rules' own, `severity` included); alert names to leave out. |
+| `metrics.grafanaDashboard.enabled` | `false` | Create a ConfigMap with the [KubeAmber dashboard](https://github.com/kubeamber/kubeamber/blob/main/docs/integrations.md#grafana-dashboard) for Grafana's dashboard sidecar. |
+| `metrics.grafanaDashboard.namespace` / `.labels` / `.annotations` | release namespace / `grafana_dashboard: "1"` / `{}` | Where the sidecar looks, the label it selects by, and e.g. `grafana_folder`. |
 | `admissionPolicy.enabled` | `true` | Block agents from changing admission webhooks. |
 | `agentsNamespace.create` / `.name` | `true` / `kubeamber-agents` | |
 | `crds.install` | `true` | |
