@@ -18,6 +18,9 @@ include breaking changes, which are called out.
   Pending ones waiting for a person can be seen and alerted on). Every replica
   reports the cluster-wide change request count, so aggregate it with `max`.
   `kubeamber_build_info` gives each running replica's version and Go version.
+  `kubeamber_decisions_total` now starts at 0 for every agent in the policy
+  and each outcome, so `increase()` counts an agent's first hold or denial
+  after a restart.
   See [docs/integrations.md](docs/integrations.md#prometheus-and-grafana-alloy).
 
 ## [0.3.1] - 2026-10-30

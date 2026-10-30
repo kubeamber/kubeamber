@@ -125,6 +125,28 @@ func TestApprovalWaitByDecisionAndSource(t *testing.T) {
 	}
 }
 
+func TestDecisionCountsStartAtZero(t *testing.T) {
+	r := manualMetrics(t)
+	f := newFixture(t)
+	f.h.InitDecisionCounts(f.h.Policy())
+
+	s := collect(t, r, "kubeamber.decisions").(metricdata.Sum[int64])
+	got := map[string]int64{}
+	for _, dp := range s.DataPoints {
+		agent, _ := dp.Attributes.Value("gen_ai.agent.name")
+		outcome, _ := dp.Attributes.Value("kubeamber.outcome")
+		got[agent.AsString()+"/"+outcome.AsString()] = dp.Value
+	}
+	if len(got) != len(outcomes) {
+		t.Errorf("got %d series, want one per outcome: %v", len(got), got)
+	}
+	for _, o := range outcomes {
+		if n, ok := got["bot/"+o]; !ok || n != 0 {
+			t.Errorf("bot/%s = %d (present %v), want 0", o, n, ok)
+		}
+	}
+}
+
 type listerFunc func(context.Context) ([]*changerequest.ChangeRequest, error)
 
 func (f listerFunc) List(ctx context.Context) ([]*changerequest.ChangeRequest, error) { return f(ctx) }

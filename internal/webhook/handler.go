@@ -447,6 +447,22 @@ func (h *Handler) reviewBridgeUpdate(req *admissionv1.AdmissionRequest, oldCR, n
 	return &admissionv1.AdmissionResponse{Allowed: true}
 }
 
+// outcomes are the values of kubeamber.outcome.
+var outcomes = []string{string(policy.Allow), string(policy.Hold), string(policy.Deny), "approved", "rejected"}
+
+// InitDecisionCounts starts the decision counter of every agent in the policy
+// at zero for each outcome. Prometheus's increase() cannot see the first
+// decision of a series that appears at 1, so without this an agent's first
+// hold or denial after a restart would be missing from dashboards and alerts.
+func (h *Handler) InitDecisionCounts(p *policy.Policy) {
+	for _, a := range p.Spec.Agents {
+		for _, o := range outcomes {
+			h.decisions.Add(context.Background(), 0, metric.WithAttributes(
+				attribute.String("gen_ai.agent.name", a.Name), attribute.String("kubeamber.outcome", o)))
+		}
+	}
+}
+
 // recordApprovalWait records how long a held change waited for the decision
 // being admitted, and where the decision was made. A dry run decides nothing.
 func (h *Handler) recordApprovalWait(req *admissionv1.AdmissionRequest, cr *changerequest.ChangeRequest, a *changerequest.Approval) {

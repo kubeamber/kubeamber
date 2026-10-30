@@ -106,7 +106,6 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 				}
 			}
 			sync(p)
-			go current.Watch(ctx, o.policy, o.reload, log, sync)
 			// Re-apply the configuration periodically too: `helm upgrade` or
 			// `kubectl apply -k` resets the CA bundle and the agent match
 			// condition to their placeholders, which would leave agents
@@ -156,6 +155,11 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 			if err := webhook.ObserveChangeRequests(store, approvalTTL, time.Now); err != nil {
 				return fmt.Errorf("metrics: %w", err)
 			}
+			h.InitDecisionCounts(p)
+			go current.Watch(ctx, o.policy, o.reload, log, func(p *policy.Policy) {
+				sync(p)
+				h.InitDecisionCounts(p)
+			})
 
 			mux := http.NewServeMux()
 			mux.Handle("/validate", h)

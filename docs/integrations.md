@@ -439,7 +439,7 @@ OTLP. Turn it off with `metrics.enabled=false` in the chart, or
 
 | Metric | Type | Labels | What it counts |
 |---|---|---|---|
-| `kubeamber_decisions_total` | counter | `gen_ai_agent_name`, `kubeamber_outcome` | Decisions on agent changes. Outcomes: `allow`, `hold`, `deny`, `approved` (an approved retry let through) and `rejected` (refused after a person rejected it). |
+| `kubeamber_decisions_total` | counter | `gen_ai_agent_name`, `kubeamber_outcome` | Decisions on agent changes. Outcomes: `allow`, `hold`, `deny`, `approved` (an approved retry let through) and `rejected` (refused after a person rejected it). Every agent in the policy starts at 0 for each outcome. |
 | `kubeamber_risk_score` | histogram, buckets every 10 points | `gen_ai_agent_name` | The risk score of each agent change. |
 | `kubeamber_review_duration_seconds` | histogram, 5 ms to 5 s | `kubeamber_outcome` | How long KubeAmber took to review an agent change. The API server waits `webhook.timeoutSeconds` (5 by default) and then, with the default `failurePolicy: Fail`, refuses the change. |
 | `kubeamber_approval_wait_seconds` | histogram, 1 minute to 1 week | `kubeamber_decision` (`approved`, `rejected`), `kubeamber_decision_source` (`cluster`, or the change-management system, such as `servicenow`) | Time from a change being held to a person's decision on it, counted when KubeAmber admits the decision. Server-side dry runs are not counted. |
@@ -466,6 +466,14 @@ cluster-wide count, so take the largest instead of adding them up:
 ```promql
 max by (kubeamber_phase) (kubeamber_change_requests)
 ```
+
+`increase()` and `rate()` can't see the first value of a series, only changes
+after it. Decision counts start at zero for every agent in the policy, so
+they're exact. The histograms appear with their first observation, so after a
+replica restarts, its first review per outcome, first decision per source and
+first risk score per agent aren't counted in `increase()`. Percentiles barely
+move; low counts, like decisions on held changes in a quiet hour, can be one
+short per replica.
 
 Pick whichever collection method your cluster already uses:
 
