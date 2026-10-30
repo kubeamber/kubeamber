@@ -12,6 +12,12 @@ publish the following, with no long-lived signing keys:
 - the Helm chart `oci://ghcr.io/kubeamber/charts/kubeamber`, at the tag's
   version without the `v`, signed the same way.
 
+The image and the chart each carry two signatures from the same keyless
+identity: cosign 3's bundle, stored as an OCI 1.1 referrer, and the legacy
+`.sig` tag. Admission verifiers such as Sigstore policy-controller (tested up
+to v0.15.1) only find the legacy one; `cosign verify` accepts either. Releases
+up to v0.2.0 have only the bundle.
+
 Pull requests that change the build run the same workflow without
 publishing.
 

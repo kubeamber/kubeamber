@@ -54,7 +54,12 @@ jobs:
           sbom: true
       - name: Sign the image
         if: steps.v.outputs.publish == 'true'
-        run: cosign sign --yes "${IMAGE}@${{ steps.build.outputs.digest }}"
+        # Signed twice: cosign 3's bundle (an OCI 1.1 referrer), and the legacy
+        # .sig tag that Sigstore policy-controller (up to v0.15.1) and other
+        # admission verifiers still need. cosign verify accepts either.
+        run: |
+          cosign sign --yes "${IMAGE}@${{ steps.build.outputs.digest }}"
+          cosign sign --yes --new-bundle-format=false --use-signing-config=false "${IMAGE}@${{ steps.build.outputs.digest }}"
 
   binaries:
     runs-on: ubuntu-latest
