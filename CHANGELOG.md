@@ -22,6 +22,17 @@ include breaking changes, which are called out.
   and each outcome, so `increase()` counts an agent's first hold or denial
   after a restart.
   See [docs/integrations.md](docs/integrations.md#prometheus-and-grafana-alloy).
+- A Grafana dashboard and alert rules in the chart, both off by default.
+  `metrics.grafanaDashboard.enabled` creates a ConfigMap for Grafana's
+  dashboard sidecar with the KubeAmber dashboard: decisions by outcome and
+  agent, risk scores, held changes waiting for a person, how long decisions
+  take, and the webhook's latency and replicas.
+  `metrics.prometheusRule.enabled` creates a PrometheusRule with four alerts:
+  the webhook is down, reviews are close to the timeout, an agent is denied
+  repeatedly, and changes have waited 30 minutes for a person. The dashboard
+  JSON and the rule file can also be used without the chart; `make
+  rules-test` tests the rules with promtool. See
+  [docs/integrations.md](docs/integrations.md#grafana-dashboard).
 
 ## [0.3.1] - 2026-10-30
 

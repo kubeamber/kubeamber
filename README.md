@@ -81,7 +81,9 @@ Every verdict carries a reason the agent can read and act on.
   and again when it is approved, rejected, applied or expires. See
   [integrations](docs/integrations.md#notifications-in-slack-teams-or-any-webhook).
 - **Traceable.** Decisions are OpenTelemetry spans linked to the agent's own
-  trace. They also appear in the Kubernetes audit log.
+  trace. They also appear in the Kubernetes audit log. The chart adds a
+  Grafana dashboard and alert rules for its Prometheus metrics. See
+  [integrations](docs/integrations.md#grafana-dashboard).
 
 ### The amber path
 
@@ -295,7 +297,7 @@ has all of it with search. The same pages are in [docs/](docs/):
 - [Policy reference](docs/policy.md)
 - [Risk model](docs/risk-model.md): every factor and its points
 - [Threat model](docs/threat-model.md): what KubeAmber does and does not protect against
-- [Integrations](docs/integrations.md): kagent, HolmesGPT, kubectl-ai, MCP clients, GitOps, OpenTelemetry
+- [Integrations](docs/integrations.md): kagent, HolmesGPT, kubectl-ai, MCP clients, GitOps, OpenTelemetry, Prometheus and Grafana
 - [Roadmap](ROADMAP.md)
 
 ## Community
