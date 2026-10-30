@@ -28,8 +28,11 @@ publishing.
 2. Update the image tag in `deploy/webhook.yaml`,
    `deploy/servicenow-bridge/deployment.yaml` and `deploy/notify/deployment.yaml`,
    `version` and `appVersion` in `charts/kubeamber/Chart.yaml` (plus the image
-   in its `artifacthub.io/images` annotation), the status line in `README.md`,
-   and the supported version in `SECURITY.md`, to the new version.
+   in its `artifacthub.io/images` annotation), the status line and install
+   commands in `README.md`, the install commands in `docs/install.md` and
+   `charts/kubeamber/README.md`, and the supported version in `SECURITY.md`,
+   to the new version. `make chart-lint` fails while the install commands
+   name another version.
 3. Merge that pull request, then tag the merge commit and push the tag:
 
    ```sh

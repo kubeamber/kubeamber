@@ -44,6 +44,10 @@ chart-lint: ## Lint the Helm chart and check its CRD matches deploy/
 	@jq -e '.uid == "kubeamber" and (.panels | length > 0)' $(CHART)/files/grafana-dashboard.json >/dev/null || (echo "$(CHART)/files/grafana-dashboard.json is not a valid dashboard" && exit 1)
 	helm lint $(CHART) --set metrics.enabled=false
 	helm lint $(CHART) --set notify.enabled=true --set 'notify.config.channels[0].name=platform' --set 'notify.config.channels[0].slack.urlFile=/etc/kubeamber/notify-secrets/slack-url'
+	@# Install commands in the docs name the chart's version.
+	@v=$$(awk '/^version:/ {print $$2}' $(CHART)/Chart.yaml); \
+	  stale=$$(grep -noE '[0-9]+\.[0-9]+\.[0-9]+' README.md docs/install.md $(CHART)/README.md | grep -v ":$$v$$"); \
+	  [ -z "$$stale" ] || { echo "These should be version $$v:"; echo "$$stale"; exit 1; }
 
 rules-test: ## Check the chart's alert rules and run their unit tests with promtool (needs Docker)
 	docker run --rm -v "$(CURDIR):/work:ro" -w /work --entrypoint promtool $(PROMETHEUS_IMAGE) check rules $(CHART)/files/prometheus-rules.yaml

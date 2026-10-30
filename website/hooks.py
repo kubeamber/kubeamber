@@ -6,8 +6,9 @@ keep it in step with the repository instead of copying text into it:
 - A line `<!-- include: README.md#Section -->` in a website/ page is replaced by
   the body of that README section, so the quickstart is written once.
 - Relative links are resolved against the file they were written in. A link to
-  a page in docs/ stays a page link; a link to anything else in the repository
-  (code, examples, the chart) becomes a link to it on GitHub.
+  a page in docs/ stays a page link, and a link to a README section that a
+  website page includes goes to that page; a link to anything else in the
+  repository (code, examples, the chart) becomes a link to it on GitHub.
 """
 
 import posixpath
@@ -28,11 +29,15 @@ FENCE = re.compile(r"^(```|~~~)", re.M)
 # website/, and included README text at the root.
 _origin = {}
 
+# The website page that includes each README section, by the section's anchor:
+# {("README.md", "quickstart"): "getting-started.md"}.
+_included = {}
+
 
 def on_files(files, config):
     site = REPO / "website"
     for path in sorted(site.glob("*.md")):
-        files.append(File.generated(config, path.name, content=_expand(path.read_text())))
+        files.append(File.generated(config, path.name, content=_expand(path.read_text(), path.name)))
         _origin[path.name] = "website/" + path.name
     for path in sorted((site / "assets").glob("**/*")):
         if path.is_file():
@@ -47,10 +52,11 @@ def on_page_markdown(markdown, page, config, files):
     return _relink(markdown, posixpath.dirname(origin), posixpath.dirname(uri))
 
 
-def _expand(text):
+def _expand(text, page):
     """Replace include markers with README sections, tagged with their origin."""
 
     def section(m):
+        _included[(m["file"], _anchor(m["section"]))] = page
         source = (REPO / m["file"]).read_text()
         heading = re.search(rf"^## {re.escape(m['section'])}\n", source, re.M)
         if not heading:
@@ -80,12 +86,19 @@ def _relink(markdown, origin_dir, page_dir):
     return "".join(out)
 
 
+def _anchor(heading):
+    """GitHub's anchor for a heading: "Using it with your agent" -> "using-it-with-your-agent"."""
+    return re.sub(r"[^\w\- ]", "", heading.lower()).replace(" ", "-")
+
+
 def _target(target, base, page_dir):
     if re.match(r"^([a-z]+:|#|/)", target):
         return target
     path, _, anchor = target.partition("#")
     repo_path = posixpath.normpath(posixpath.join(base, path))
     frag = "#" + anchor if anchor else ""
+    if (repo_path, anchor) in _included:
+        return posixpath.relpath(_included[(repo_path, anchor)], page_dir or ".")
     if repo_path.startswith("docs/") and (REPO / repo_path).exists():
         return posixpath.relpath(repo_path[len("docs/"):], page_dir or ".") + frag
     if repo_path.startswith("website/"):

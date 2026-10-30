@@ -292,9 +292,11 @@ The policy is a file, normally the mounted ConfigMap
 `/etc/kubeamber/policy.yaml`. KubeAmber re-reads it every 5 seconds
 (`--reload-interval`) and swaps it in atomically when its checksum changes.
 Polling follows the kubelet's symlink swap when a mounted ConfigMap is
-updated. A file that fails to parse or validate is logged and ignored: a
-bad edit never replaces a working policy. Each reload also resyncs the match
-condition.
+updated. The kubelet updates a mounted ConfigMap up to a minute after it
+changes, and each replica's copy separately, so a new policy takes effect
+within about a minute and replicas may briefly disagree. A file that fails to
+parse or validate is logged and ignored: a bad edit never replaces a working
+policy. Each reload also resyncs the match condition.
 
 ## Telemetry
 

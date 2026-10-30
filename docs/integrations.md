@@ -153,20 +153,40 @@ Agents cannot work around this:
 The server sends instructions telling the agent to preview first, set
 `kubeamber.dev/intent` on held changes, and retry only after approval.
 
-Claude Code:
+Set it up once:
 
 ```sh
-claude mcp add kubeamber -- kubeamber mcp --policy /path/to/policy.yaml --agent workstation-agents
+# The policy the webhook enforces. Save it again when the policy changes.
+kubectl -n kubeamber-system get configmap kubeamber-policy \
+  -o jsonpath='{.data.policy\.yaml}' > ~/.kube/kubeamber-policy.yaml
+# Let agents read change requests, so they can follow up on held changes.
+kubectl create clusterrolebinding kubeamber-agents-view --clusterrole=kubeamber-viewer \
+  --group=system:serviceaccounts:kubeamber-agents --group=kubeamber:agents
 ```
 
-Any client using the common `mcpServers` format:
+`kubeamber-viewer` is read-only. Change requests hold who asked for what, the
+score's factors and a summary, never the objects themselves. Without it,
+`kubeamber_change_request` fails with `forbidden`.
+
+`--agent` is the agent profile the agent's identity falls under, so that
+previews match the webhook's verdicts. `kubeamber agent-kubeconfig` prints it:
+with the default policy, its identities are `sre-agent`; identities in the
+group `kubeamber:agents` are `workstation-agents`.
+
+Claude Code, started with the agent's kubeconfig:
+
+```sh
+claude mcp add kubeamber -- kubeamber mcp --policy ~/.kube/kubeamber-policy.yaml --agent sre-agent
+```
+
+Any client using the common `mcpServers` format, with the policy's full path:
 
 ```json
 {
   "mcpServers": {
     "kubeamber": {
       "command": "kubeamber",
-      "args": ["mcp", "--policy", "/path/to/policy.yaml", "--agent", "workstation-agents"]
+      "args": ["mcp", "--policy", "/home/you/.kube/kubeamber-policy.yaml", "--agent", "sre-agent"]
     }
   }
 }

@@ -1,6 +1,6 @@
 ---
 title: Getting started
-description: Install KubeAmber, try it on kind, approve held changes and connect your agents.
+description: Install KubeAmber, watch it allow, hold and deny a test agent's changes, and connect your agents.
 ---
 
 # Getting started
@@ -19,6 +19,8 @@ description: Install KubeAmber, try it on kind, approve held changes and connect
 
 ## Next steps
 
+- Roll it out: [Installation](install.md) covers approvers, policy changes,
+  upgrades, uninstalling, Argo CD and Flux, and troubleshooting.
 - Write your policy: [Policy](policy.md).
 - Understand the score: [Risk model](risk-model.md).
 - Wire it into your tools: [Integrations](integrations.md).

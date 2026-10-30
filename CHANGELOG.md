@@ -33,6 +33,34 @@ include breaking changes, which are called out.
   JSON and the rule file can also be used without the chart; `make
   rules-test` tests the rules with promtool. See
   [docs/integrations.md](docs/integrations.md#grafana-dashboard).
+- An installation guide, [docs/install.md](docs/install.md): requirements,
+  Helm, plain manifests, Argo CD and Flux, checking the installation,
+  installing and verifying the CLI, telling KubeAmber who your agents are,
+  approvers, policy changes, upgrades, uninstalling, platform notes and
+  troubleshooting. The README's Quickstart now installs released versions and
+  shows a test agent's changes being allowed, held, approved and denied,
+  without building from source.
+
+### Changed
+
+- The plain manifests' default policy (`deploy/policy.yaml`) is now the same
+  as the Helm chart's. The `scratch-namespaces` rule, which allowed any agent
+  change in `sandbox-*` namespaces, and the `friday-evening` freeze, which held
+  agent changes in `prod` on Friday evenings (Asia/Kolkata), are now
+  commented-out examples. If you rely on them, add them to your own policy
+  before applying the new manifests.
+- When the API server reviews a refused change a second time, which it does
+  when its first attempt started from cached state, the agent is now told its
+  change was held for approval, with the expiry, instead of "still waiting for
+  a human" on its first try. The same goes for any retry within 30 seconds.
+- Policy reloads are documented as taking up to about a minute: the kubelet
+  updates a mounted ConfigMap on its own schedule, separately for each
+  replica.
+
+### Fixed
+
+- `kubeamber version` printed `dev` for a CLI installed with `go install`; it
+  now prints the module version.
 
 ## [0.3.1] - 2026-10-30
 
