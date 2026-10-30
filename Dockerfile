@@ -1,4 +1,7 @@
-# Base images are pinned by digest; Dependabot keeps them current.
+# Base images are pinned by digest. The runtime image is Chainguard's static
+# image (Wolfi, signed by Chainguard; see docs/releasing.md). The build stage
+# stays on golang:1.26 to match go.mod and CI: cgr.dev/chainguard/go is free
+# only as :latest, which is already the next Go release.
 FROM --platform=$BUILDPLATFORM golang:1.26@sha256:3745f1aa11822297b79113f5e84ce2bffeb039734571c39855809cfe9e5d7be6 AS build
 ARG TARGETOS TARGETARCH VERSION=dev
 WORKDIR /src
@@ -9,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
     -ldflags "-s -w -X github.com/kubeamber/kubeamber/internal/version.Version=${VERSION}" \
     -o /out/kubeamber ./cmd/kubeamber
 
-FROM gcr.io/distroless/static:nonroot@sha256:18f4cc26c9ffa7f20a359298be7deadac5c607c8e03a02b8119f1a5fc2f82c99
+FROM cgr.dev/chainguard/static:latest@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9
 COPY --from=build /out/kubeamber /kubeamber
 LABEL org.opencontainers.image.source="https://github.com/kubeamber/kubeamber" \
       org.opencontainers.image.description="KubeAmber: traffic lights for AI agents on Kubernetes" \
