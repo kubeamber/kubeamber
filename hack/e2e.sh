@@ -93,8 +93,12 @@ step "3. Risky changes are held for a human"
 check "agent opens a shell in a prod pod" blocked "kubeamber: HOLD .*interactive session \(exec\)" -- \
   agent -n prod exec deploy/checkout -c app -- true
 POD=$(k -n prod get pods -l app=checkout -o jsonpath='{.items[0].metadata.name}')
+# Profiles are explicit: kubectl's default changed between releases, and
+# newer defaults add SYS_PTRACE, which scores as host-level access.
 check "agent adds a debug container to a prod pod" blocked "kubeamber: HOLD \(risk 70/100\).*ephemeral container" -- \
-  agent -n prod debug "$POD" --image=registry.k8s.io/pause:3.10 -c debugger
+  agent -n prod debug "$POD" --image=registry.k8s.io/pause:3.10 -c debugger --profile=restricted
+check "  ...one that can trace processes is denied" blocked "kubeamber: DENY .*CAP_SYS_PTRACE" -- \
+  agent -n prod debug "$POD" --image=registry.k8s.io/pause:3.10 -c tracer --profile=general
 check "agent proxies into a prod pod" blocked "kubeamber: HOLD \(risk 60/100\).*interactive session \(proxy\)" -- \
   agent get --raw "/api/v1/namespaces/prod/pods/$POD:80/proxy/"
 CSRDIR=$(mktemp -d)
