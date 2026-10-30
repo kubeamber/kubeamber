@@ -1,0 +1,49 @@
+name: digestabot
+# Weekly: when a Chainguard tag pinned in this repository (such as
+# cgr.dev/chainguard/static:latest) points to a new digest, verify Chainguard's
+# signature on it and open a pull request with the new digest and the package
+# changes from its SBOM. Dependabot handles all other dependencies.
+#
+# The pull request is opened with a short-lived token from Octo STS
+# (.github/chainguard/digestabot.sts.yaml): pull requests opened with
+# GITHUB_TOKEN don't run CI, and main requires CI.
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+permissions: {}
+jobs:
+  digests:
+    # Forks have no Octo STS trust policy.
+    if: github.repository == 'kubeamber/kubeamber'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # federate with Octo STS, and sign commits with gitsign
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: octo-sts/action@f603d3be9d8dd9871a265776e625a27b00effe05 # v1.1.1
+        id: octo-sts
+        with:
+          scope: kubeamber/kubeamber
+          identity: digestabot
+      - uses: chainguard-dev/digestabot@33d0b78e580aa0c83fe188eb3dfad6611b662479 # v1.3.2
+        with:
+          token: ${{ steps.octo-sts.outputs.token }}
+          signoff: true
+          sbom-diff: true
+          verify-signatures: |
+            - images: cgr.dev/chainguard/
+              identity: https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main
+              issuer: https://token.actions.githubusercontent.com
+          labels-for-pr: dependencies
+          branch-for-pr: digestabot/update-digests
+          title-for-pr: "build(deps): update Chainguard image digests"
+          commit-message: "build(deps): update Chainguard image digests"
+          description-for-pr: |
+            Chainguard published new digests for image tags pinned in this
+            repository. digestabot verified Chainguard's signature on each
+            new digest before updating it; the package changes are in the
+            workflow run's summary.

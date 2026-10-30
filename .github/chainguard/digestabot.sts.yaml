@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/octo-sts/app/refs/heads/main/pkg/octosts/octosts.TrustPolicy.json
+#
+# Lets .github/workflows/digestabot.yaml, on main only, open pull requests that
+# update pinned cgr.dev digests. Octo STS (https://github.com/octo-sts/app)
+# exchanges the workflow's OIDC token for a GitHub token with just these
+# permissions, valid for an hour, so there is no long-lived secret. Unlike
+# GITHUB_TOKEN, its pull requests run CI.
+#
+# The subject is GitHub's immutable form, with the organization and repository
+# IDs, so a repository that later takes over the name can't match it.
+issuer: https://token.actions.githubusercontent.com
+subject: repo:kubeamber@345679292/kubeamber@1427977157:ref:refs/heads/main
+claim_pattern:
+  job_workflow_ref: kubeamber/kubeamber/\.github/workflows/digestabot\.yaml@refs/heads/main
+
+permissions:
+  contents: write
+  pull_requests: write

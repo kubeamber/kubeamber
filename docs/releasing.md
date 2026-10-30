@@ -78,3 +78,33 @@ SBOM and provenance:
 docker buildx imagetools inspect ghcr.io/kubeamber/kubeamber:v0.2.0 --format '{{ json .SBOM }}'
 docker buildx imagetools inspect ghcr.io/kubeamber/kubeamber:v0.2.0 --format '{{ json .Provenance }}'
 ```
+
+## Keeping dependencies current
+
+Two bots open weekly pull requests, and CI runs on each:
+
+- **Dependabot** ([`.github/dependabot.yml`](../.github/dependabot.yml)): Go
+  modules, GitHub Actions (pinned by commit SHA), the `golang` build image and
+  the website's Python packages.
+- **digestabot** ([`.github/workflows/digestabot.yaml`](../.github/workflows/digestabot.yaml)):
+  the digests of `cgr.dev/chainguard` images, in every file that pins one.
+  It verifies Chainguard's signature on a new digest before it updates it,
+  lists the package changes from the image's SBOM in the run summary, and
+  signs off and signs (gitsign) its commits.
+
+The release workflow runs `make verify-base-images` before every image build.
+It checks that `Dockerfile` and `hack/Dockerfile.local` pin the same base
+image, and verifies Chainguard's signature on it. Run it locally with cosign
+installed.
+
+digestabot opens its pull requests with a short-lived token from
+[Octo STS](https://github.com/octo-sts/app), because pull requests opened with
+`GITHUB_TOKEN` don't run CI. The trust policy
+[`.github/chainguard/digestabot.sts.yaml`](../.github/chainguard/digestabot.sts.yaml)
+grants only `contents: write` and `pull_requests: write`, only to that workflow
+on `main`, for an hour at a time. One-time setup: install the
+[Octo STS GitHub App](https://github.com/apps/octo-sts/installations/new) on
+the kubeamber organization with **Only select repositories → kubeamber**. Don't
+give it the other repositories (such as security advisory forks). The App
+itself is granted broad permissions; the trust policy is what limits each
+token.
