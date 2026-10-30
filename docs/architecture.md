@@ -107,7 +107,10 @@ list; the full value in `spec.fingerprint` is compared exactly.
 ```
 
 - **Pending:** a retry of the same change is denied with "still waiting". No
-  duplicate request is raised.
+  duplicate request is raised. The API server also reviews a refused update a
+  second time when its first attempt started from cached state, so one kubectl
+  command often reaches the webhook twice. For 30 seconds after a request is
+  raised, a retry is therefore answered as the new hold was.
 - **Rejected:** retries are denied with the human's reason until
   `pendingTTL` after the decision; after that a retry raises a new request.
 - **Expired:** ignored; a retry raises a new request.
