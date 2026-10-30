@@ -1,0 +1,29 @@
+# A web server on Chainguard's nginx image, pinned by digest. digestabot keeps
+# the digest current (.github/workflows/digestabot.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: web
+          image: cgr.dev/chainguard/nginx:latest@sha256:16d0e55ffe62f55744d9b903d8eb57e533d0f660332a9fbb967d78b4e77c8bdb
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}

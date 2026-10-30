@@ -1,0 +1,24 @@
+# The same web server on Docker Hub's nginx, by tag: outside the trusted
+# repositories and not pinned by digest, so KubeAmber holds it for an agent.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}

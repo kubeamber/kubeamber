@@ -1,0 +1,28 @@
+# KubeAmber policy for the Chainguard example: the default policy plus image
+# provenance. Agents may deploy Chainguard images, and KubeAmber's own, pinned
+# by digest, without a human; any other image is held for approval.
+# Reference: docs/policy.md#specimages
+apiVersion: kubeamber.dev/v1alpha1
+kind: Policy
+metadata:
+  name: chainguard
+spec:
+  agents:
+    - name: sre-agent
+      serviceAccounts: ["kubeamber-agents/*"]
+  thresholds:
+    hold: 30
+    deny: 80
+  protectedNamespaces: ["kube-system", "kube-public", "prod", "prod-*"]
+  images:
+    trusted: ["cgr.dev/chainguard/*", "ghcr.io/kubeamber/*"]
+    requireDigest: true
+  rules:
+    - name: no-rbac-changes
+      match:
+        kinds: [Role, RoleBinding, ClusterRole, ClusterRoleBinding]
+      action: deny
+      reason: agents may not change RBAC, because that would let them grant themselves more power
+  approvals:
+    ttl: 15m
+    pendingTTL: 1h
