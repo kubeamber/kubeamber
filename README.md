@@ -29,7 +29,7 @@ every change an agent makes and gives it a light:
 
 Every verdict carries a reason the agent can read and act on.
 
-> Status: **alpha (v0.2.0)**. The `kubeamber.dev/v1alpha1` API may change between
+> Status: **alpha (v0.3.0)**. The `kubeamber.dev/v1alpha1` API may change between
 > minor releases.
 
 ## How it works

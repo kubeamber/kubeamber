@@ -40,8 +40,8 @@ KubeAmber is pre-1.0. Security fixes go to the latest minor release only.
 
 | Version | Supported |
 |---|---|
-| 0.1.x | Yes |
-| < 0.1 | No |
+| 0.3.x | Yes |
+| < 0.3 | No |
 
 ## Scope
 
