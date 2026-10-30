@@ -146,11 +146,16 @@ func webhookCmd(kf *kube.Flags) *cobra.Command {
 				Guard:  guards.NewPrometheus(),
 				Self:   decide.Self{Namespace: o.namespace, WebhookName: o.webhookConfig},
 			}
+			store := &changerequest.Store{Client: dyn}
 			h := webhook.NewHandler(webhook.Handler{
-				Engine: engine, Store: &changerequest.Store{Client: dyn}, Policy: current.Get,
+				Engine: engine, Store: store, Policy: current.Get,
 				SelfUser: selfUser, BridgeUser: bridgeUser, Owners: &agentid.Owners{Client: cs}, Log: log,
 				Events: recorder, EventOutcomes: eventOutcomes,
 			})
+			approvalTTL := func() time.Duration { return current.Get().Spec.Approvals.TTL.Duration }
+			if err := webhook.ObserveChangeRequests(store, approvalTTL, time.Now); err != nil {
+				return fmt.Errorf("metrics: %w", err)
+			}
 
 			mux := http.NewServeMux()
 			mux.Handle("/validate", h)

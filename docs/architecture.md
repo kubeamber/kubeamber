@@ -309,9 +309,16 @@ is configured.
   `kubeamber.target.name`, `k8s.namespace.name`. If the object carries
   `kubeamber.dev/traceparent`, the span links to that span context.
 - **Metrics**: `kubeamber.decisions` (counter, by `gen_ai.agent.name` and
-  `kubeamber.outcome` = allow / hold / deny / approved / rejected) and
-  `kubeamber.risk.score` (histogram, buckets every 10 points). Prometheus sees
-  them as `kubeamber_decisions_total` and `kubeamber_risk_score`
+  `kubeamber.outcome` = allow / hold / deny / approved / rejected),
+  `kubeamber.risk.score` (histogram, buckets every 10 points),
+  `kubeamber.review.duration` (histogram in seconds, by `kubeamber.outcome`, up
+  to the webhook's default 5-second timeout), `kubeamber.approval.wait` (histogram
+  in seconds from hold to decision, by `kubeamber.decision` and
+  `kubeamber.decision.source`) and `kubeamber.change_requests` (gauge, by
+  effective `kubeamber.phase`, read from the API server at collection time).
+  Prometheus sees them as `kubeamber_decisions_total`, `kubeamber_risk_score`,
+  `kubeamber_review_duration_seconds`, `kubeamber_approval_wait_seconds` and
+  `kubeamber_change_requests`
   ([integrations](integrations.md#prometheus-and-grafana-alloy)).
 - **Audit log**: admission responses carry audit annotations, which the API
   server records as `agents.kubeamber.dev/verdict`, `agents.kubeamber.dev/score`,

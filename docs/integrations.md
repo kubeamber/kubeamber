@@ -422,9 +422,10 @@ Then:
   agent sets `kubeamber.dev/traceparent`, the span links to the agent's trace,
   so in Tempo or Jaeger you can go from the agent's reasoning to the cluster
   decision and back. Filter by `gen_ai.agent.name` and `kubeamber.outcome`.
-- **Metrics**: `kubeamber.decisions` by outcome and agent, and the
-  `kubeamber.risk.score` histogram. A rising hold rate means a noisy policy, an
-  agent going off the rails, or both.
+- **Metrics**: `kubeamber.decisions` by outcome and agent, the
+  `kubeamber.risk.score` histogram, review latency, the wait for a person's
+  decision, and change requests by phase. A rising hold rate means a noisy
+  policy, an agent going off the rails, or both.
 - **Audit**: `agents.kubeamber.dev/verdict`, `score`, `agent` and
   `change-request` audit annotations join KubeAmber decisions with Kubernetes
   audit events in Loki or any log store.
@@ -440,6 +441,9 @@ OTLP. Turn it off with `metrics.enabled=false` in the chart, or
 |---|---|---|---|
 | `kubeamber_decisions_total` | counter | `gen_ai_agent_name`, `kubeamber_outcome` | Decisions on agent changes. Outcomes: `allow`, `hold`, `deny`, `approved` (an approved retry let through) and `rejected` (refused after a person rejected it). |
 | `kubeamber_risk_score` | histogram, buckets every 10 points | `gen_ai_agent_name` | The risk score of each agent change. |
+| `kubeamber_review_duration_seconds` | histogram, 5 ms to 5 s | `kubeamber_outcome` | How long KubeAmber took to review an agent change. The API server waits `webhook.timeoutSeconds` (5 by default) and then, with the default `failurePolicy: Fail`, refuses the change. |
+| `kubeamber_approval_wait_seconds` | histogram, 1 minute to 1 week | `kubeamber_decision` (`approved`, `rejected`), `kubeamber_decision_source` (`cluster`, or the change-management system, such as `servicenow`) | Time from a change being held to a person's decision on it, counted when KubeAmber admits the decision. Server-side dry runs are not counted. |
+| `kubeamber_change_requests` | gauge | `kubeamber_phase` (`Pending`, `Approved`, `Rejected`, `Consumed`, `Expired`) | Change requests in the cluster by effective phase: a pending request past its deadline, or an approval past `approvals.ttl`, counts as `Expired`. Listed from the API server on each scrape. |
 | `target_info` | gauge | `service_name`, `service_version`, `host_name` | One series per replica. |
 
 Go runtime and process metrics (`go_*`, `process_*`) are included. Each replica
@@ -447,6 +451,19 @@ counts only the requests it reviewed, so add replicas up in queries:
 
 ```promql
 sum by (gen_ai_agent_name, kubeamber_outcome) (rate(kubeamber_decisions_total[5m]))
+
+# 99th percentile review latency
+histogram_quantile(0.99, sum by (le) (rate(kubeamber_review_duration_seconds_bucket[5m])))
+
+# Median time for a person to decide on a held change, over the last day
+histogram_quantile(0.5, sum by (le) (increase(kubeamber_approval_wait_seconds_bucket[1d])))
+```
+
+`kubeamber_change_requests` is the exception: every replica reports the same
+cluster-wide count, so take the largest instead of adding them up:
+
+```promql
+max by (kubeamber_phase) (kubeamber_change_requests)
 ```
 
 Pick whichever collection method your cluster already uses:
