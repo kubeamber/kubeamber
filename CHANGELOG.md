@@ -12,6 +12,22 @@ include breaking changes, which are called out.
 - [examples/chainguard](examples/chainguard/README.md) also requires
   KubeAmber's own image to be signed by its release workflow, which works
   with Sigstore policy-controller from v0.3.0 on.
+- CI runs `govulncheck` (`make vulncheck`) on every pull request and push, and
+  weekly, and fails when a known Go vulnerability is reachable from
+  KubeAmber's code.
+
+### Security
+
+- `golang.org/x/net` is updated from v0.59.0 to v0.62.0. v0.3.0 and earlier
+  reach five vulnerabilities in its HTTP/2 code, fixed in v0.60.0:
+  GO-2026-6612 (critical), GO-2026-6603, GO-2026-6610, GO-2026-6611 and
+  GO-2026-6617 (high). Two more in its HTML parser (GO-2026-6860,
+  GO-2026-6866) were present but not reachable.
+- The CLI binaries of v0.3.0 and earlier were built with Go 1.26.0, whose
+  standard library has vulnerabilities KubeAmber reaches (for example
+  GO-2026-6617 in `net/http`, GO-2026-6809 in `crypto/x509`). `go.mod` now
+  sets `toolchain go1.26.10`, which CI and the release workflow use. The
+  container images were already built with Go 1.26.10.
 
 ## [0.3.0] - 2026-10-30
 

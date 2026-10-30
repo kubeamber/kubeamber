@@ -18,6 +18,8 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: go build ./cmd/kubeamber
+      - name: Known vulnerabilities
+        run: make vulncheck
   e2e:
     runs-on: ubuntu-latest
     needs: test
