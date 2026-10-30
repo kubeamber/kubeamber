@@ -70,6 +70,11 @@ type Assessment struct {
 type Options struct {
 	// IsProtected reports whether a namespace is protected.
 	IsProtected func(namespace string) bool
+	// TrustedImage reports whether an image repository is trusted. Nil turns
+	// the untrusted-image factor off.
+	TrustedImage func(repository string) bool
+	// RequireDigest scores images that are not pinned by digest.
+	RequireDigest bool
 }
 
 // CriticalLabel marks an object as critical; changes to it score higher.
@@ -82,6 +87,7 @@ func Assess(c Change, opts Options) Assessment {
 	kindFactors(a, c)
 	workloadFactors(a, c)
 	podSpecFactors(a, c)
+	imageFactors(a, c, opts)
 	scopeFactors(a, c, opts)
 
 	for _, f := range a.Factors {

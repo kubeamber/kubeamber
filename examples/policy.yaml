@@ -27,6 +27,12 @@ spec:
   # Changes here score +25.
   protectedNamespaces: ["kube-system", "kube-public", "prod", "prod-*"]
 
+  # Score where the images an agent deploys come from: an image outside these
+  # repositories scores +30, one not pinned by digest +10.
+  # images:
+  #   trusted: ["cgr.dev/chainguard/*", "ghcr.io/kubeamber/*"]
+  #   requireDigest: true
+
   # Evaluated in order; the first match applies. An "allow" rule overrides the
   # risk score, but freeze windows, guards and KubeAmber's built-in
   # self-protection still apply.
