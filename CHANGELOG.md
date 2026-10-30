@@ -7,6 +7,12 @@ include breaking changes, which are called out.
 
 ## [Unreleased]
 
+### Changed
+
+- [examples/chainguard](examples/chainguard/README.md) also requires
+  KubeAmber's own image to be signed by its release workflow, which works
+  with Sigstore policy-controller from v0.3.0 on.
+
 ## [0.3.0] - 2026-10-30
 
 ### Added

@@ -128,7 +128,9 @@ kubectl label namespace shop policy.sigstore.dev/include=true
 [image-policies.yaml](policy-controller/image-policies.yaml) requires images
 from `cgr.dev/chainguard` to carry Chainguard's signature: keyless, from
 `https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main`
-with issuer `https://token.actions.githubusercontent.com`.
+with issuer `https://token.actions.githubusercontent.com`. It also requires
+KubeAmber's own images to be signed by KubeAmber's release workflow (see
+part 3).
 [values.yaml](policy-controller/values.yaml) sets `no-match-policy: warn`, so
 images no policy covers are admitted with a warning.
 
@@ -186,12 +188,19 @@ cosign verify ghcr.io/kubeamber/kubeamber:<version> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-KubeAmber's releases are signed with cosign 3, which stores the signature as
-an OCI 1.1 referrer in the new bundle format. cosign 3 verifies it.
-policy-controller 0.13.1 (chart 0.10.8) reports `no signatures found` for it,
-so this example doesn't add a ClusterImagePolicy for `ghcr.io/kubeamber`.
-Chainguard's images use the older signature format, which policy-controller
-reads.
+Since v0.3.0, each release image carries two signatures: cosign 3's bundle,
+stored as an OCI 1.1 referrer, and the legacy `.sig` tag. policy-controller
+(tested with 0.13.1 and 0.15.1) only finds the legacy one, so the
+`kubeamber-images` policy admits v0.3.0 and later and refuses v0.2.0, which
+has only the bundle:
+
+```console
+$ kubectl -n shop create deployment ka --image=ghcr.io/kubeamber/kubeamber:v0.3.0 --dry-run=server
+deployment.apps/ka created (server dry run)
+
+$ kubectl -n shop create deployment ka --image=ghcr.io/kubeamber/kubeamber:v0.2.0 --dry-run=server
+error: … failed policy: kubeamber-images: … signature keyless validation failed …
+```
 
 ## Part 4: build KubeAmber from source with melange and apko
 

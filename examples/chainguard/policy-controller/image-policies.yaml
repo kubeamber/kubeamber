@@ -1,5 +1,6 @@
-# Images from cgr.dev/chainguard must carry Chainguard's signature: a Sigstore
-# keyless signature from its GitHub Actions release workflow, logged in Rekor.
+# Images from cgr.dev/chainguard must carry Chainguard's signature, and
+# KubeAmber's own images the signature of its release workflow. Both are
+# Sigstore keyless signatures from GitHub Actions, logged in Rekor.
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
 metadata:
@@ -13,3 +14,19 @@ spec:
         identities:
           - issuer: https://token.actions.githubusercontent.com
             subject: https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main
+---
+# KubeAmber v0.3.0 and later. Earlier releases carry only cosign 3's bundle
+# signature, which policy-controller doesn't read, so they are refused.
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: kubeamber-images
+spec:
+  images:
+    - glob: "ghcr.io/kubeamber/**"
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegExp: ^https://github\.com/kubeamber/kubeamber/\.github/workflows/release\.yaml@refs/tags/v.*$
