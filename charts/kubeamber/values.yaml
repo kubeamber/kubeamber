@@ -98,7 +98,7 @@ crds:
   install: true
 
 # The policy KubeAmber enforces. Reference: docs/policy.md. KubeAmber reloads
-# it within seconds of a `helm upgrade`, without restarting.
+# it within about a minute of a `helm upgrade`, without restarting.
 policy:
   apiVersion: kubeamber.dev/v1alpha1
   kind: Policy

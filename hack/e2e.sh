@@ -125,7 +125,7 @@ check "a server-side dry run is judged but raises nothing" blocked "dry run, so 
 check "agent scales prod/checkout to 0" blocked "kubeamber: HOLD \(risk 75/100, replicas 3 → 0\)" -- \
   agent -n prod scale deploy/checkout --replicas=0
 CR=$(grep -oE "$CR_PATTERN" <<<"$LAST" | head -1)
-check "retrying before approval raises no duplicate" blocked "$CR is still waiting for a human" -- \
+check "retrying before approval raises no duplicate" blocked "[Cc]hange request $CR( is still waiting| \(expires in)" -- \
   agent -n prod scale deploy/checkout --replicas=0
 check "kubeamber list shows it" allowed "$CR +Pending +sre-agent +UPDATE Deployment prod/checkout +75" -- tp list
 check "the hold is an Event on prod/checkout, with the approve command" allowed \

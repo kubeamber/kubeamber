@@ -15,6 +15,7 @@ hooks:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
+  - Installation: install.md
   - Concepts:
       - Architecture: architecture.md
       - Risk model: risk-model.md

@@ -4,8 +4,8 @@ Installs [KubeAmber](https://github.com/kubeamber/kubeamber): traffic lights
 for AI agents on Kubernetes.
 
 ```sh
-helm install kubeamber oci://ghcr.io/kubeamber/charts/kubeamber \
-  --namespace kubeamber-system --create-namespace
+helm install kubeamber oci://ghcr.io/kubeamber/charts/kubeamber --version 0.3.1 \
+  --namespace kubeamber-system --create-namespace --wait
 ```
 
 KubeAmber is **one per cluster**: its webhook configuration, admission policy
@@ -13,7 +13,9 @@ and CRD are cluster-wide. Kubernetes 1.30 or later.
 
 After installing, the chart's notes show how to check that KubeAmber is
 reviewing agents, who may approve held changes, and how to give an agent its
-own identity.
+own identity. The [installation guide](https://github.com/kubeamber/kubeamber/blob/main/docs/install.md)
+covers the policy, upgrades, uninstalling, Argo CD and Flux, and
+troubleshooting.
 
 ## What it installs
 
@@ -74,10 +76,34 @@ Every key is documented in [`values.yaml`](values.yaml).
 
 ## Upgrades
 
+Keep your settings in a values file and pass it to every upgrade:
+
+```sh
+helm upgrade kubeamber oci://ghcr.io/kubeamber/charts/kubeamber --version <new version> \
+  --namespace kubeamber-system -f kubeamber-values.yaml
+```
+
+If you set values with `--set`, use `--reset-then-reuse-values` (Helm 3.14 or
+later) to keep them. `--reuse-values` also keeps the previous version's
+defaults, so settings a new version adds are missing.
+
 KubeAmber writes two things into its webhook configuration at runtime: the
 CA bundle it serves with, and the match condition that sends it only agent
 traffic. The chart reads both back during `helm upgrade`, so an upgrade never
 leaves agents unreviewed. KubeAmber also re-applies them every 30 seconds.
+With Argo CD, which renders the chart without access to the cluster, see
+[the installation guide](https://github.com/kubeamber/kubeamber/blob/main/docs/install.md#with-argo-cd-or-flux).
+
+## Uninstalling
+
+```sh
+helm uninstall kubeamber --namespace kubeamber-system
+```
+
+The ChangeRequest CRD, with every change request, and the `kubeamber-agents`
+namespace, with agents' service accounts, are kept. Delete them with
+`kubectl delete crd changerequests.kubeamber.dev` and
+`kubectl delete namespace kubeamber-agents`.
 
 ## Examples
 
@@ -95,7 +121,8 @@ Connect held changes to ServiceNow:
 ```sh
 kubectl -n kubeamber-system create secret generic kubeamber-servicenow \
   --from-literal=client-id=... --from-literal=client-secret=...
-helm upgrade kubeamber oci://ghcr.io/kubeamber/charts/kubeamber -n kubeamber-system --reuse-values \
+helm upgrade kubeamber oci://ghcr.io/kubeamber/charts/kubeamber --version 0.3.1 \
+  -n kubeamber-system --reset-then-reuse-values \
   --set bridge.enabled=true \
   --set bridge.config.servicenow.instanceURL=https://example.service-now.com
 ```

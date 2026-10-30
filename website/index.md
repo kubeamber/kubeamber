@@ -111,8 +111,9 @@ A dangerous change. Refused, with the reason and a hint toward a safer path.
 
 <div class="ka-cta" markdown>
 
-**Try it on your laptop in a few minutes.** `make kind-demo` builds a kind
-cluster and plays an agent with `cluster-admin` through every scenario.
+**Try it in a few minutes**, on your own cluster or a kind cluster on your
+laptop: install the chart, then watch a test agent's changes being allowed,
+held and denied.
 
 [Get started](getting-started.md){ .md-button .md-button--primary }
 

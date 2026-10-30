@@ -101,10 +101,13 @@ to each other. [docs/architecture.md](docs/architecture.md) has the details.
 ## What an agent sees
 
 Score manifests offline with `kubeamber check`, the same engine the webhook runs.
-This is the policy from [examples/policy.yaml](examples/policy.yaml):
+From a clone of this repository, with the example policy
+[examples/policy.yaml](examples/policy.yaml) (its Friday-evening change freeze
+adds a line while it is in effect):
 
 ```console
-$ kubeamber check -f scale-to-zero.yaml --old live-checkout-prod.yaml --policy policy.yaml --agent sre-agent
+$ cd examples
+$ kubeamber check -f manifests/scale-to-zero.yaml --old manifests/live-checkout-prod.yaml --policy policy.yaml --agent sre-agent
 HOLD   UPDATE Deployment prod/checkout  risk 75/100  (replicas 3 → 0)
           +10  modifies a resource
            +5  changes a workload
@@ -112,7 +115,7 @@ HOLD   UPDATE Deployment prod/checkout  risk 75/100  (replicas 3 → 0)
           +25  namespace "prod" is protected
          ->   risk 75/100 is at or above the hold threshold (30)
 
-$ kubeamber check -f escalate-privileges.yaml --policy policy.yaml --agent sre-agent
+$ kubeamber check -f manifests/escalate-privileges.yaml --policy policy.yaml --agent sre-agent
 DENY   CREATE ClusterRoleBinding sre-agent-is-admin  risk 60/100
            +5  creates a resource
           +45  changes cluster-wide permissions (possible privilege escalation)
@@ -143,44 +146,112 @@ deployment.apps/checkout scaled
 
 ## Quickstart
 
-You need Docker, [kind](https://kind.sigs.k8s.io/), kubectl and Go 1.26.
+You need kubectl, Helm 3.8 or later, and a Kubernetes 1.30+ cluster on which
+you are cluster-admin. For a cluster on your laptop,
+[kind](https://kind.sigs.k8s.io/) needs only Docker: `kind create cluster`.
+
+**1. Install KubeAmber in the cluster.**
+
+```sh
+helm install kubeamber oci://ghcr.io/kubeamber/charts/kubeamber --version 0.3.1 \
+  --namespace kubeamber-system --create-namespace --wait
+```
+
+**2. Install the `kubeamber` CLI**, which you use to approve held changes. On
+macOS or Linux:
+
+```sh
+VERSION=0.3.1
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+curl -fsSL "https://github.com/kubeamber/kubeamber/releases/download/v${VERSION}/kubeamber_${VERSION}_${OS}_${ARCH}.tar.gz" | tar -xz
+sudo install -m 0755 "kubeamber_${VERSION}_${OS}_${ARCH}/kubeamber" /usr/local/bin/kubeamber
+```
+
+For Windows, `go install`, and checking the download's checksum and
+signature, see [Install the CLI](docs/install.md#install-the-cli).
+
+**3. Watch it work.** Create a test agent: a service account in the
+`kubeamber-agents` namespace, which the default policy treats as an agent,
+with admin rights in a `demo` namespace. You act as the agent with
+`kubectl --as`.
+
+```sh
+kubectl create namespace demo
+kubectl -n demo create deployment web --image=nginx --replicas=2
+kubectl -n kubeamber-agents create serviceaccount demo-agent
+kubectl -n demo create rolebinding demo-agent --clusterrole=admin \
+  --serviceaccount=kubeamber-agents:demo-agent
+AGENT=system:serviceaccount:kubeamber-agents:demo-agent
+```
+
+A routine change goes through, and the agent sees its risk score. (KubeAmber's
+messages are one line; they are wrapped here.)
+
+```console
+$ kubectl --as=$AGENT -n demo scale deploy/web --replicas=3
+Warning: kubeamber: ALLOW (risk 15/100, replicas 2 → 3): risk 15/100 is below the hold threshold (30).
+Factors: +10 modifies a resource, +5 changes a workload
+deployment.apps/web scaled
+```
+
+Taking the app offline is held for a person to decide:
+
+```console
+$ kubectl --as=$AGENT -n demo scale deploy/web --replicas=0
+Error from server (Forbidden): admission webhook "agents.kubeamber.dev" denied the request:
+kubeamber: HOLD (risk 50/100, replicas 3 → 0): risk 50/100 is at or above the hold threshold (30).
+Factors: +10 modifies a resource, +5 changes a workload, +35 scales web from 3 to 0 replicas
+(takes it offline). Held for human approval as change request cr-9232d91c-d4dvc (expires in 1h0m0s).
+Ask an operator to run `kubeamber approve cr-9232d91c-d4dvc`, then retry this exact change.
+```
+
+Approve it as yourself, with the name it printed (`kubeamber list` shows it
+too). The agent's retry of the same change then goes through, once:
+
+```console
+$ kubeamber approve cr-9232d91c-d4dvc --reason "trying KubeAmber"
+approved cr-9232d91c-d4dvc: UPDATE Deployment demo/web requested by sre-agent (risk 50)
+The agent can now retry the identical change once.
+
+$ kubectl --as=$AGENT -n demo scale deploy/web --replicas=0
+Warning: kubeamber: ALLOW (approved by kubernetes-admin in change request cr-9232d91c-d4dvc): trying KubeAmber
+deployment.apps/web scaled
+```
+
+Changing permissions is denied, although RBAC allows it, because the default
+policy forbids agents to change RBAC:
+
+```console
+$ kubectl --as=$AGENT -n demo create rolebinding helper --clusterrole=admin \
+    --serviceaccount=kubeamber-agents:demo-agent
+error: failed to create rolebinding: admission webhook "agents.kubeamber.dev" denied the request:
+kubeamber: DENY (risk 40/100): agents may not change RBAC, because that would let them grant
+themselves more power. Factors: +5 creates a resource, +35 changes namespace permissions (possible
+privilege escalation). Do not retry this change; propose a safer alternative or ask a human to make it.
+```
+
+Clean up with `kubectl delete namespace demo` and
+`kubectl -n kubeamber-agents delete serviceaccount demo-agent`.
+
+**Next,** the [installation guide](docs/install.md) shows how to tell
+KubeAmber who your real agents are, choose who approves, change the policy,
+upgrade and uninstall. It also covers the plain manifests (no Helm), Argo CD
+and Flux, notes for EKS, AKS and GKE, and troubleshooting.
+
+**The full tour.** `make kind-demo` builds KubeAmber from source, installs it
+on a new kind cluster, and plays an agent with `cluster-admin` through every
+scenario in [hack/e2e.sh](hack/e2e.sh): allow, hold, approve, retry, reject,
+deny, attempts to switch KubeAmber off, a change approved through a simulated
+ServiceNow, and a developer giving their agent its own revocable identity.
+RBAC allows every one of them; KubeAmber decides. It needs Docker, kind,
+kubectl, Go 1.26 or later, git, make, curl and openssl (on Windows, use WSL).
+It uses the kind cluster `kubeamber`, and creates it if it doesn't exist:
 
 ```sh
 git clone https://github.com/kubeamber/kubeamber && cd kubeamber
 make kind-demo
-```
-
-This creates a kind cluster, builds and loads the image, deploys KubeAmber, and
-plays an agent with `cluster-admin` through 52 scenarios
-([hack/e2e.sh](hack/e2e.sh)): allow, hold, approve, retry, reject, deny, and
-attempts to switch KubeAmber off, a change approved through a simulated
-ServiceNow, and a developer giving their agent its own revocable identity. RBAC allows every one of them; KubeAmber decides.
-
-To install on an existing cluster (Kubernetes 1.30+, for `matchConditions`),
-use the [Helm chart](charts/kubeamber):
-
-```sh
-helm install kubeamber oci://ghcr.io/kubeamber/charts/kubeamber \
-  --namespace kubeamber-system --create-namespace
-```
-
-or the plain manifests:
-
-```sh
-kubectl apply -k "https://github.com/kubeamber/kubeamber/deploy?ref=main"
-```
-
-Then edit the `kubeamber-policy` ConfigMap in `kubeamber-system`; see
-[docs/policy.md](docs/policy.md). Policy changes are picked up within seconds,
-with no restart.
-
-Approvals happen from your own kubeconfig. RBAC decides who may approve: bind
-the `kubeamber-approver` ClusterRole to your on-call group.
-
-```sh
-kubeamber list                                  # pending change requests
-kubeamber approve cr-3fa9c2d1-x7k2q --reason "incident 4411, approved by on-call"
-kubeamber reject  cr-3fa9c2d1-x7k2q --reason "scale to 1 instead"
+make kind-down     # delete the cluster afterwards
 ```
 
 ## Using it with your agent
@@ -208,25 +279,41 @@ KUBECONFIG=./claude-code.kubeconfig claude
 kubeamber agent-kubeconfig claude-code --revoke    # kill switch
 ```
 
-The agent gets only the access you bind, and never more than you have. You are
-recorded as its owner, and a colleague, not you, has to approve its held
-changes.
+In PowerShell, start the agent with
+`$env:KUBECONFIG = ".\claude-code.kubeconfig"; claude`. The agent gets only
+the access you bind, in namespaces that already exist, and never more than you
+have. You are recorded as its owner, and a colleague, not you, has to approve
+its held changes.
 
 **Preview before acting (MCP).** `kubeamber mcp` serves three read-only tools over
 stdio: `kubeamber_preview`, `kubeamber_policy` and `kubeamber_change_request`. With
 them an agent can check a change before it makes it, and follow up on held
-changes.
+changes. It needs three things:
+
+- **The policy the webhook enforces**, saved from the cluster. Save it again
+  when the policy changes.
+- **The agent's profile**, which `kubeamber agent-kubeconfig` prints
+  (`reviewed as agent profile "sre-agent"` with the default policy), so its
+  previews match the webhook's verdicts.
+- **Permission to read change requests**, to follow up on held changes. Bind
+  the read-only `kubeamber-viewer` role to the agents once.
 
 ```sh
-claude mcp add kubeamber -- kubeamber mcp --policy policy.yaml --agent workstation-agents
+kubectl -n kubeamber-system get configmap kubeamber-policy \
+  -o jsonpath='{.data.policy\.yaml}' > ~/.kube/kubeamber-policy.yaml
+kubectl create clusterrolebinding kubeamber-agents-view --clusterrole=kubeamber-viewer \
+  --group=system:serviceaccounts:kubeamber-agents --group=kubeamber:agents
+claude mcp add kubeamber -- kubeamber mcp --policy ~/.kube/kubeamber-policy.yaml --agent sre-agent
 ```
+
+Other MCP clients take the same command, with the policy's full path:
 
 ```json
 {
   "mcpServers": {
     "kubeamber": {
       "command": "kubeamber",
-      "args": ["mcp", "--policy", "/path/to/policy.yaml", "--agent", "workstation-agents"]
+      "args": ["mcp", "--policy", "/home/you/.kube/kubeamber-policy.yaml", "--agent", "sre-agent"]
     }
   }
 }
@@ -293,6 +380,7 @@ decide which of an agent's allowed changes need a human.
 The website, [kubeamber.github.io/kubeamber](https://kubeamber.github.io/kubeamber/),
 has all of it with search. The same pages are in [docs/](docs/):
 
+- [Installation](docs/install.md): install, check, approvers, policy changes, upgrades, uninstalling, troubleshooting
 - [Architecture](docs/architecture.md): request flow, approval protocol, failure modes
 - [Policy reference](docs/policy.md)
 - [Risk model](docs/risk-model.md): every factor and its points

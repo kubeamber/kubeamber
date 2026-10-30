@@ -290,6 +290,12 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 				return deny(fmt.Sprintf("%s. Change request %s is waiting for a ticket to be opened in your change-management system. Retry this exact change once it is approved there.",
 					msg, cr.Name)), cr.Name, "hold"
 			}
+			// The API server reviews a refused update again when its first
+			// attempt started from cached state, so one kubectl command can
+			// find the request it raised a moment ago: answer as for a new one.
+			if age := now.Sub(cr.CreationTimestamp.Time); !cr.CreationTimestamp.IsZero() && age >= 0 && age <= replayWindow {
+				return deny(heldMessage(msg, cr.Name, cr.Spec.ExpiresAt.Sub(now).Round(time.Minute))), cr.Name, "hold"
+			}
 			return deny(fmt.Sprintf("%s. Change request %s is still waiting for a human. Ask an operator to run `kubeamber approve %s`, then retry this exact change.",
 				msg, cr.Name, cr.Name)), cr.Name, "hold"
 		case changerequest.Rejected:
@@ -329,8 +335,12 @@ func (h *Handler) hold(ctx context.Context, req *admissionv1.AdmissionRequest, c
 		return deny(fmt.Sprintf("%s. Held as change request %s; a ticket is being opened in your change-management system. Retry this exact change once it is approved there.",
 			msg, cr.Name)), cr.Name, "hold"
 	}
-	return deny(fmt.Sprintf("%s. Held for human approval as change request %s (expires in %s). Ask an operator to run `kubeamber approve %s`, then retry this exact change.",
-		msg, cr.Name, p.Spec.Approvals.PendingTTL.Duration, cr.Name)), cr.Name, "hold"
+	return deny(heldMessage(msg, cr.Name, p.Spec.Approvals.PendingTTL.Duration)), cr.Name, "hold"
+}
+
+func heldMessage(msg, name string, expiresIn time.Duration) string {
+	return fmt.Sprintf("%s. Held for human approval as change request %s (expires in %s). Ask an operator to run `kubeamber approve %s`, then retry this exact change.",
+		msg, name, expiresIn, name)
 }
 
 // reviewChangeRequest enforces who may change a ChangeRequest, and how.

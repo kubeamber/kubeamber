@@ -180,9 +180,19 @@ func TestHoldApproveRetry(t *testing.T) {
 		t.Errorf("code %d annotations %v", resp.Result.Code, resp.AuditAnnotations)
 	}
 
-	// 2. Retrying before approval does not raise a second request.
+	// The API server reviewing the same write again a moment later finds that
+	// request, and the agent is told about it as a new one.
+	cr.CreationTimestamp = metav1.NewTime(f.now)
+	f.now = f.now.Add(time.Second)
 	resp = f.h.Review(ctx, scaleToZero(agentUser))
-	if resp.Allowed || len(f.store.crs) != 1 || !strings.Contains(resp.Result.Message, "still waiting") {
+	if resp.Allowed || len(f.store.crs) != 1 || !strings.Contains(resp.Result.Message, "Held for human approval as change request cr-1 (expires in 1h0m0s)") {
+		t.Fatalf("API-server re-review: allowed=%v crs=%d msg=%q", resp.Allowed, len(f.store.crs), resp.Result.Message)
+	}
+
+	// 2. Retrying later, before approval, does not raise a second request.
+	f.now = f.now.Add(replayWindow + time.Second)
+	resp = f.h.Review(ctx, scaleToZero(agentUser))
+	if resp.Allowed || len(f.store.crs) != 1 || !strings.Contains(resp.Result.Message, "cr-1 is still waiting") {
 		t.Fatalf("retry before approval: allowed=%v crs=%d msg=%q", resp.Allowed, len(f.store.crs), resp.Result.Message)
 	}
 
