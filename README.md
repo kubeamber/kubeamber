@@ -7,6 +7,14 @@
 
 <p align="center"><b>Traffic lights for AI agents on Kubernetes.</b></p>
 
+<p align="center">
+  <a href="https://github.com/kubeamber/kubeamber/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/kubeamber/kubeamber/actions/workflows/ci.yaml/badge.svg"></a>
+  <a href="https://github.com/kubeamber/kubeamber/releases"><img alt="Release" src="https://img.shields.io/github/v/release/kubeamber/kubeamber"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/kubeamber/kubeamber"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/kubeamber/kubeamber/badge"></a>
+  <a href="https://m8ven.ai/mcp/kubeamber/kubeamber"><img alt="M8ven" src="https://m8ven.ai/badge/mcp/kubeamber/kubeamber?variant=verified"></a>
+</p>
+
 AI agents such as kagent, HolmesGPT, kubectl-ai and Claude Code now get write
 access to clusters. RBAC can only say yes or no to a verb on a resource: it
 cannot tell a routine rollout restart from scaling production to zero, and it
@@ -279,6 +287,9 @@ Gatekeeper for organisation-wide rules that apply to everyone. Use KubeAmber to
 decide which of an agent's allowed changes need a human.
 
 ## Documentation
+
+The website, [kubeamber.github.io/kubeamber](https://kubeamber.github.io/kubeamber/),
+has all of it with search. The same pages are in [docs/](docs/):
 
 - [Architecture](docs/architecture.md): request flow, approval protocol, failure modes
 - [Policy reference](docs/policy.md)

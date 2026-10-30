@@ -1,0 +1,177 @@
+/* KubeAmber brand on Material for MkDocs: charcoal and amber, from the logo. */
+
+:root {
+  --ka-charcoal: #1c1917;
+  --ka-amber: #f59e0b;
+  --ka-amber-deep: #b45309;
+  --ka-green: #16a34a;
+  --ka-red: #dc2626;
+}
+
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--ka-charcoal);
+  --md-primary-fg-color--light: #292524;
+  --md-primary-fg-color--dark: #0c0a09;
+  --md-primary-bg-color: #fafaf9;
+  --md-accent-fg-color: var(--ka-amber-deep);
+  --md-typeset-a-color: var(--ka-amber-deep);
+  --ka-card-bg: #ffffff;
+  --ka-card-border: #e7e5e4;
+  --ka-muted: #57534e;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 24;
+  --md-default-bg-color: #0c0a09;
+  --md-primary-fg-color: #0c0a09;
+  --md-primary-fg-color--light: #1c1917;
+  --md-primary-fg-color--dark: #000000;
+  --md-primary-bg-color: #fafaf9;
+  --md-accent-fg-color: var(--ka-amber);
+  --md-typeset-a-color: var(--ka-amber);
+  --md-footer-bg-color: #0c0a09;
+  --md-footer-bg-color--dark: #000000;
+  --ka-card-bg: #1c1917;
+  --ka-card-border: #292524;
+  --ka-muted: #a8a29e;
+}
+
+.md-header,
+.md-tabs {
+  border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.md-typeset .md-button--primary {
+  background-color: var(--ka-amber);
+  border-color: var(--ka-amber);
+  color: var(--ka-charcoal);
+}
+
+.md-typeset .md-button--primary:hover,
+.md-typeset .md-button--primary:focus {
+  background-color: var(--ka-amber-deep);
+  border-color: var(--ka-amber-deep);
+  color: #ffffff;
+}
+
+/* Home page */
+
+.ka-hero {
+  text-align: center;
+  padding: 2.5rem 0 1.5rem;
+}
+
+.md-typeset .ka-hero__logo {
+  width: min(420px, 80%);
+  margin-bottom: 1rem;
+}
+
+.md-typeset .ka-hero__title {
+  font-size: 2.4rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0.5rem auto 1rem;
+  max-width: 18em;
+  color: var(--md-default-fg-color);
+}
+
+.md-typeset .ka-hero__title .headerlink {
+  display: none;
+}
+
+.md-typeset .ka-hero__lead {
+  font-size: 1.05rem;
+  color: var(--ka-muted);
+  max-width: 38em;
+  margin: 0 auto 1.5rem;
+}
+
+.ka-hero .md-button {
+  margin: 0.25rem;
+}
+
+.ka-lights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  margin: 2rem 0 2.5rem;
+}
+
+.ka-light {
+  background: var(--ka-card-bg);
+  border: 1px solid var(--ka-card-border);
+  border-radius: 0.5rem;
+  padding: 1.2rem 1.2rem 0.4rem;
+}
+
+.ka-light > p:first-of-type {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.1rem;
+  margin-top: 0;
+}
+
+.ka-lamp {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 50%;
+  flex: none;
+}
+
+.ka-light--green .ka-lamp { background: var(--ka-green); box-shadow: 0 0 0.6rem var(--ka-green); }
+.ka-light--amber .ka-lamp { background: var(--ka-amber); box-shadow: 0 0 0.6rem var(--ka-amber); }
+.ka-light--red .ka-lamp { background: var(--ka-red); box-shadow: 0 0 0.6rem var(--ka-red); }
+
+.ka-light--green { border-top: 3px solid var(--ka-green); }
+.ka-light--amber { border-top: 3px solid var(--ka-amber); }
+.ka-light--red { border-top: 3px solid var(--ka-red); }
+
+.md-typeset .ka-diagram {
+  border-radius: 0.5rem;
+  border: 1px solid var(--ka-card-border);
+}
+
+.md-typeset .grid.cards > ul > li {
+  background: var(--ka-card-bg);
+  border-color: var(--ka-card-border);
+}
+
+.md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--md-accent-fg-color);
+}
+
+.ka-cta {
+  text-align: center;
+  margin: 3rem 0 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--ka-card-border);
+  border-radius: 0.5rem;
+  background: var(--ka-card-bg);
+}
+
+@media screen and (max-width: 44.9375em) {
+  .md-typeset .ka-hero__title {
+    font-size: 1.7rem;
+  }
+}
+
+/* Dark scheme: Material's secondary button and headings take the primary
+   colour, which is the page background here. */
+[data-md-color-scheme="slate"] .md-typeset .md-button:not(.md-button--primary) {
+  color: #fafaf9;
+  border-color: #57534e;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .md-button:not(.md-button--primary):hover,
+[data-md-color-scheme="slate"] .md-typeset .md-button:not(.md-button--primary):focus {
+  color: var(--ka-amber);
+  border-color: var(--ka-amber);
+}
+
+[data-md-color-scheme="slate"] .md-typeset h1,
+[data-md-color-scheme="slate"] .md-typeset .ka-hero__title {
+  color: #f5f5f4;
+}

@@ -2,12 +2,17 @@ package webhook
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"cel.dev/cel-go/cel"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/kubeamber/kubeamber/pkg/policy"
 )
@@ -128,5 +133,36 @@ func TestConfiguratorSync(t *testing.T) {
 	}
 	if changed, err := c.Sync(ctx, []byte("CA"), p); err != nil || changed {
 		t.Errorf("second sync should be a no-op: changed=%v err=%v", changed, err)
+	}
+}
+
+// Two replicas syncing at once make one update fail with a conflict; Sync
+// reads again and retries instead of logging an error.
+func TestConfiguratorSyncRetriesConflicts(t *testing.T) {
+	p, err := policy.Parse([]byte(exprPolicy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := fake.NewClientset(&admissionregv1.ValidatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{Name: "kubeamber"},
+		Webhooks:   []admissionregv1.ValidatingWebhook{{Name: AgentsWebhook}},
+	})
+	conflicts := 1
+	cs.PrependReactor("update", "validatingwebhookconfigurations", func(k8stesting.Action) (bool, runtime.Object, error) {
+		if conflicts == 0 {
+			return false, nil, nil
+		}
+		conflicts--
+		gr := schema.GroupResource{Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations"}
+		return true, nil, apierrors.NewConflict(gr, "kubeamber", errors.New("the object has been modified"))
+	})
+	c := &Configurator{Client: cs, Name: "kubeamber", SelfUser: selfUser}
+	ctx := context.Background()
+	if changed, err := c.Sync(ctx, []byte("CA"), p); err != nil || !changed {
+		t.Fatalf("sync after a conflict: changed=%v err=%v", changed, err)
+	}
+	cfg, _ := cs.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(ctx, "kubeamber", metav1.GetOptions{})
+	if string(cfg.Webhooks[0].ClientConfig.CABundle) != "CA" {
+		t.Error("CA bundle not written after the retry")
 	}
 }

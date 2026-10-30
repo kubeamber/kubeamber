@@ -5,7 +5,11 @@ LDFLAGS := -X github.com/kubeamber/kubeamber/internal/version.Version=$(VERSION)
 
 CHART   := charts/kubeamber
 
-.PHONY: build test lint fmt chart-sync chart-lint docker-build docker-build-local kind-up kind-deploy-helm kind-demo-helm kind-load kind-deploy kind-demo e2e kind-down clean
+# Who signs the public cgr.dev/chainguard images (Sigstore keyless).
+CHAINGUARD_IDENTITY := https://github.com/chainguard-images/images/.github/workflows/release.yaml@refs/heads/main
+CHAINGUARD_ISSUER   := https://token.actions.githubusercontent.com
+
+.PHONY: build test lint fmt chart-sync chart-lint docker-build docker-build-local verify-base-images kind-up kind-deploy-helm kind-demo-helm kind-load kind-deploy kind-demo e2e kind-down clean
 
 build: ## Build bin/kubeamber
 	go build -ldflags "$(LDFLAGS)" -o bin/kubeamber ./cmd/kubeamber
@@ -38,6 +42,12 @@ docker-build: ## Build the container image
 docker-build-local: ## Build the image from a host-compiled binary (small and fast; used by the kind targets)
 	CGO_ENABLED=0 GOOS=linux GOARCH=$$(go env GOARCH) go build -trimpath -ldflags "-s -w $(LDFLAGS)" -o bin/linux/kubeamber ./cmd/kubeamber
 	docker build -f hack/Dockerfile.local -t $(IMAGE) .
+
+verify-base-images: ## Check both Dockerfiles pin the same Chainguard base, and verify Chainguard's signature on it (needs cosign)
+	@refs=$$(grep -h '^FROM' Dockerfile hack/Dockerfile.local | grep -o 'cgr\.dev/[^ ]*' | sort -u); \
+	test "$$(echo "$$refs" | grep -c .)" -eq 1 || { echo "Dockerfile and hack/Dockerfile.local must pin the same cgr.dev base image:"; echo "$$refs"; exit 1; }; \
+	echo "verifying $$refs"; \
+	cosign verify "$$refs" --certificate-identity $(CHAINGUARD_IDENTITY) --certificate-oidc-issuer $(CHAINGUARD_ISSUER) >/dev/null
 
 kind-up: ## Create a kind cluster
 	kind get clusters | grep -qx $(CLUSTER) || kind create cluster --name $(CLUSTER) --wait 90s

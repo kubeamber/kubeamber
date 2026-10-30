@@ -14,3 +14,16 @@ updates:
   - package-ecosystem: docker
     directory: /
     schedule: {interval: weekly}
+    ignore:
+      # digestabot keeps the cgr.dev digests current, in every file, after
+      # verifying Chainguard's signature (.github/workflows/digestabot.yaml).
+      - dependency-name: "chainguard/*"
+  - package-ecosystem: pip
+    directory: /website
+    schedule: {interval: weekly}
+    groups:
+      website: {patterns: ["*"]}
+    ignore:
+      # MkDocs 2.0 drops the plugin and hook system the site uses.
+      - dependency-name: mkdocs
+        versions: [">=2"]

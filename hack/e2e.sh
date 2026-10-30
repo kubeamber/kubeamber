@@ -346,5 +346,40 @@ check "  ...and Slack hears it was applied" allowed "Applied: UPDATE Deployment 
 check "on-call only got the hold, as routed" allowed '^1$' -- sh -c "curl -sf 'http://$HOOK_ADDR/received?path=/teams' | grep -c '$CR5'"
 k -n prod scale deploy/checkout --replicas=3 >/dev/null
 
+step "13. The serving certificate is renewed without a restart"
+# Deleting the Secret forces a new certificate and CA, as an expiry would.
+# restarts: each webhook pod with its restart count, so a replaced pod shows too.
+restarts() {
+  k -n kubeamber-system get pods -l app.kubernetes.io/name=kubeamber \
+    -o jsonpath='{range .items[*]}{.metadata.name}={.status.containerStatuses[0].restartCount}{" "}{end}'
+}
+RESTARTS=$(restarts)
+OLD_CA=$(k -n kubeamber-system get secret kubeamber-webhook-tls -o jsonpath='{.data.ca\.crt}')
+k -n kubeamber-system delete secret kubeamber-webhook-tls >/dev/null
+# ca_published: a replica has written a new Secret, and every webhook in the
+# configuration trusts its CA.
+ca_published() {
+  local secret bundle
+  secret=$(k -n kubeamber-system get secret kubeamber-webhook-tls -o jsonpath='{.data.ca\.crt}') || return 1
+  [[ -n $secret && $secret != "$OLD_CA" ]] || return 1
+  for bundle in $(k get validatingwebhookconfiguration kubeamber -o jsonpath='{.webhooks[*].clientConfig.caBundle}'); do
+    [[ $bundle == "$secret" ]] || return 1
+  done
+}
+# agents_served: ten agent changes in a row are reviewed, so both replicas
+# serve a certificate the new CA verifies.
+agents_served() {
+  local i out
+  for i in $(seq 1 10); do
+    out=$(agent -n shop annotate configmap checkout-config --overwrite "e2e.kubeamber.dev/renewal=$i" 2>&1) || return 1
+    grep -q "kubeamber: ALLOW" <<<"$out" || return 1
+  done
+}
+renewed() { wait_for 90 ca_published && echo "new CA published"; }
+served() { wait_for 60 agents_served && echo "10 agent changes allowed in a row"; }
+check "a replica writes a new certificate and every webhook trusts its CA" allowed "published" -- renewed
+check "  ...both replicas serve the new certificate to agents" allowed "allowed in a row" -- served
+check "  ...without restarting or replacing either pod" allowed "^${RESTARTS}\$" -- restarts
+
 printf '\n\033[1m%d passed, %d failed\033[0m\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]

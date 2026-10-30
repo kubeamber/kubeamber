@@ -1,0 +1,6 @@
+# Top-level dependencies of the website. requirements.txt pins these and
+# everything they need, with hashes:
+#   uv pip compile website/requirements.in --universal --python-version 3.12 --generate-hashes -o website/requirements.txt
+# Stay on MkDocs 1.x: MkDocs 2.0 drops the plugin and hook system this site uses.
+mkdocs==1.6.1
+mkdocs-material==9.8.0

@@ -32,6 +32,26 @@ func TestLoadExample(t *testing.T) {
 	}
 }
 
+func TestTrustedImage(t *testing.T) {
+	p, err := Parse([]byte(minimal + "  images: {trusted: ['cgr.dev/chainguard/*', 'localhost:5000/*'], requireDigest: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for repo, want := range map[string]bool{
+		"cgr.dev/chainguard/nginx": true,
+		"localhost:5000/app":       true,
+		"cgr.dev/someone-else/x":   false,
+		"docker.io/library/nginx":  false,
+	} {
+		if got := p.TrustedImage(repo); got != want {
+			t.Errorf("TrustedImage(%q) = %v, want %v", repo, got, want)
+		}
+	}
+	if !p.Spec.Images.RequireDigest {
+		t.Error("requireDigest not parsed")
+	}
+}
+
 func TestDefaults(t *testing.T) {
 	p, err := Parse([]byte(minimal))
 	if err != nil {
@@ -51,19 +71,22 @@ func TestDefaults(t *testing.T) {
 
 func TestValidation(t *testing.T) {
 	cases := map[string]string{
-		"unknown field":       minimal + "  thresholdz: {}\n",
-		"wrong kind":          strings.Replace(minimal, "kind: Policy", "kind: Polcy", 1),
-		"no agents":           "apiVersion: kubeamber.dev/v1alpha1\nkind: Policy\nspec: {agents: []}\n",
-		"bad service account": strings.Replace(minimal, "agents/*", "agents", 1),
-		"bad thresholds":      minimal + "  thresholds: {hold: 90, deny: 50}\n",
-		"bad rule action":     minimal + "  rules: [{name: r, action: maybe}]\n",
-		"unknown rule agent":  minimal + "  rules: [{name: r, action: deny, match: {agents: [ghost]}}]\n",
-		"bad operation":       minimal + "  rules: [{name: r, action: deny, match: {operations: [PATCH]}}]\n",
-		"bad freeze day":      minimal + "  freezeWindows: [{name: f, days: [Funday], start: '10:00', end: '11:00'}]\n",
-		"bad freeze time":     minimal + "  freezeWindows: [{name: f, start: '25:00', end: '11:00'}]\n",
-		"mixed freeze":        minimal + "  freezeWindows: [{name: f, start: '10:00', end: '11:00', from: '2026-01-01T00:00:00Z', until: '2026-01-02T00:00:00Z'}]\n",
-		"bad time zone":       minimal + "  freezeWindows: [{name: f, start: '10:00', end: '11:00', timeZone: Mars/Base}]\n",
-		"guard without url":   minimal + "  guards: {prometheus: {checks: [{name: c, query: up}]}}\n",
+		"unknown field":        minimal + "  thresholdz: {}\n",
+		"wrong kind":           strings.Replace(minimal, "kind: Policy", "kind: Polcy", 1),
+		"no agents":            "apiVersion: kubeamber.dev/v1alpha1\nkind: Policy\nspec: {agents: []}\n",
+		"bad service account":  strings.Replace(minimal, "agents/*", "agents", 1),
+		"bad thresholds":       minimal + "  thresholds: {hold: 90, deny: 50}\n",
+		"bad rule action":      minimal + "  rules: [{name: r, action: maybe}]\n",
+		"unknown rule agent":   minimal + "  rules: [{name: r, action: deny, match: {agents: [ghost]}}]\n",
+		"bad operation":        minimal + "  rules: [{name: r, action: deny, match: {operations: [PATCH]}}]\n",
+		"bad freeze day":       minimal + "  freezeWindows: [{name: f, days: [Funday], start: '10:00', end: '11:00'}]\n",
+		"bad freeze time":      minimal + "  freezeWindows: [{name: f, start: '25:00', end: '11:00'}]\n",
+		"mixed freeze":         minimal + "  freezeWindows: [{name: f, start: '10:00', end: '11:00', from: '2026-01-01T00:00:00Z', until: '2026-01-02T00:00:00Z'}]\n",
+		"bad time zone":        minimal + "  freezeWindows: [{name: f, start: '10:00', end: '11:00', timeZone: Mars/Base}]\n",
+		"guard without url":    minimal + "  guards: {prometheus: {checks: [{name: c, query: up}]}}\n",
+		"trusted image tag":    minimal + "  images: {trusted: ['cgr.dev/chainguard/nginx:latest']}\n",
+		"trusted image digest": minimal + "  images: {trusted: ['cgr.dev/chainguard/nginx@sha256:fc42af']}\n",
+		"empty trusted image":  minimal + "  images: {trusted: ['']}\n",
 	}
 	for name, doc := range cases {
 		t.Run(name, func(t *testing.T) {

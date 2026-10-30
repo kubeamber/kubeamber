@@ -206,6 +206,16 @@ held, and 3 if anything would be denied. Treat 2 as "needs a human review" and
 3 as "block". Pass `--old` with the live object to score updates accurately,
 and `-o json` for machine-readable output.
 
+## Container image supply chain (Chainguard, Sigstore)
+
+Agents that change workloads also choose images. The policy's
+[`spec.images`](policy.md#specimages) holds an agent's change when it adds an
+image from outside your trusted repositories, or one not pinned by digest.
+Sigstore's policy-controller then checks, for everyone, that an image is
+genuinely signed. [examples/chainguard](../examples/chainguard/README.md) puts
+the two together with Chainguard's free images, step by step, with no
+Chainguard account.
+
 ## Notifications in Slack, Teams or any webhook
 
 `kubeamber notify` tells people about held changes where they already work.

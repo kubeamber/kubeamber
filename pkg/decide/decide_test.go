@@ -133,6 +133,28 @@ func TestEvaluate(t *testing.T) {
 	}
 }
 
+func TestImagePolicy(t *testing.T) {
+	p, err := policy.Parse([]byte(doc + "  images: {trusted: ['cgr.dev/chainguard/*'], requireDigest: true}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &Engine{Policy: func() *policy.Policy { return p }}
+	deploy := func(image string) risk.Change {
+		return risk.Change{Operation: "CREATE", Group: "apps", Kind: "Deployment", Namespace: "shop", Name: "web",
+			Object: map[string]any{"kind": "Deployment", "spec": map[string]any{"template": map[string]any{"spec": map[string]any{
+				"containers": []any{map[string]any{"name": "web", "image": image}},
+			}}}}}
+	}
+	d := e.Evaluate(context.Background(), Request{User: agentUser, Change: deploy("nginx:latest"), Now: normalDay})
+	if d.Verdict != policy.Hold || d.Score != 50 {
+		t.Errorf("untrusted image: verdict %s, score %d, want hold at 50; factors %+v", d.Verdict, d.Score, d.Factors)
+	}
+	d = e.Evaluate(context.Background(), Request{User: agentUser, Change: deploy("cgr.dev/chainguard/nginx:latest@sha256:fc42af33"), Now: normalDay})
+	if d.Verdict != policy.Allow || d.Score != 10 {
+		t.Errorf("pinned Chainguard image: verdict %s, score %d, want allow at 10; factors %+v", d.Verdict, d.Score, d.Factors)
+	}
+}
+
 func TestAgentOverride(t *testing.T) {
 	d := engine(t, nil).Evaluate(context.Background(), Request{Agent: "bot", Change: risk.Change{Operation: "UPDATE", Kind: "ConfigMap", Namespace: "shop"}, Now: normalDay})
 	if d.Agent != "bot" || d.Verdict != policy.Allow {

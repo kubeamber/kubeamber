@@ -1,0 +1,32 @@
+# The example's agent: a service account in kubeamber-agents (so KubeAmber
+# reviews it) that may manage Deployments in the shop namespace, and nothing
+# else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: web-agent
+  namespace: kubeamber-agents
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: web-agent
+  namespace: shop
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: web-agent
+  namespace: shop
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: web-agent
+subjects:
+  - kind: ServiceAccount
+    name: web-agent
+    namespace: kubeamber-agents

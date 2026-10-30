@@ -97,7 +97,11 @@ func (e *Engine) Evaluate(ctx context.Context, r Request) Decision {
 		return d
 	}
 
-	a := risk.Assess(c, risk.Options{IsProtected: p.IsProtectedNamespace})
+	opts := risk.Options{IsProtected: p.IsProtectedNamespace, RequireDigest: p.Spec.Images.RequireDigest}
+	if len(p.Spec.Images.Trusted) > 0 {
+		opts.TrustedImage = p.TrustedImage
+	}
+	a := risk.Assess(c, opts)
 	d.Score, d.Factors, d.Summary, d.PodsAffected = a.Score, a.Factors, a.Summary, a.PodsAffected
 	ns := effectiveNamespace(c)
 

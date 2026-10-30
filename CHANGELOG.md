@@ -9,6 +9,19 @@ include breaking changes, which are called out.
 
 ### Added
 
+- Image provenance in the risk score, opt-in with the policy's `spec.images`:
+  an image a change adds from a repository outside `trusted` scores +30, and
+  with `requireDigest` one not pinned by digest scores +10, so an agent that
+  swaps in an unknown or movable image needs a human. Scores don't change
+  unless `spec.images` is set. `kubeamber check` and MCP previews apply it too,
+  and the MCP `kubeamber_policy` tool lists the trusted repositories. See
+  [docs/policy.md](docs/policy.md#specimages).
+- A Chainguard example ([examples/chainguard](examples/chainguard/README.md)):
+  agents may deploy only Chainguard images pinned by digest (`spec.images`),
+  Sigstore policy-controller verifies Chainguard's signatures for everyone, how
+  to verify KubeAmber's own base and release images, and how to build KubeAmber
+  from source into a minimal Wolfi image with melange and apko. No Chainguard
+  account needed.
 - A kagent walkthrough ([examples/kagent](examples/kagent/README.md)) with
   screenshots of a kagent agent's changes being allowed, held, approved and
   denied, plus a KubeAmber-aware kagent Agent.
@@ -32,14 +45,27 @@ include breaking changes, which are called out.
   in a ConfigMap, and is enabled with the chart's `notify.enabled` or
   `deploy/notify`.
 - Architecture diagrams in the README and `docs/architecture.md`.
+- A website at [kubeamber.github.io/kubeamber](https://kubeamber.github.io/kubeamber/),
+  built from `docs/` and the README with MkDocs Material and published by the
+  `website` workflow.
 
 ### Changed
 
+- The container image is built on Chainguard's `cgr.dev/chainguard/static`
+  (Wolfi-based, signed by Chainguard) instead of `gcr.io/distroless/static`.
+  It still runs as the non-root user 65532. The image for local kind runs uses
+  the same base and digest; it had fallen behind the release image.
+  [docs/releasing.md](docs/releasing.md) shows how to verify the base image.
 - The logo artwork kit and its generator are no longer kept in the repository;
   the README logo and chart icon are in `docs/images/`.
 
 ### Fixed
 
+- Admission verifiers couldn't verify KubeAmber's image or chart: cosign 3
+  signs in its new bundle format, stored as an OCI 1.1 referrer, and Sigstore
+  policy-controller (up to v0.15.1) reports `no signatures found` for it.
+  Releases are now also signed in the legacy `.sig` format, which
+  policy-controller reads; `cosign verify` accepts either.
 - The kagent integration guide matched `kagent/*`, which also reviewed the
   kagent controller. It now matches the tool server's service account,
   `kagent/kagent-tools`.
@@ -47,6 +73,15 @@ include breaking changes, which are called out.
   exporter that sent to `localhost:4318` and failed. Traces and metrics now
   start only when their own endpoint, or the shared one, is set, so metrics can
   be pushed straight to Prometheus's OTLP receiver.
+- After a certificate renewal, webhook replicas wrote different CA bundles
+  into the webhook configuration, so about half of agents' requests and
+  approvals failed until every pod restarted
+  ([#16](https://github.com/kubeamber/kubeamber/issues/16)). A renewal now
+  keeps the CA, the CA key is stored in the Secret, and each replica reloads
+  the certificate and publishes the Secret's CA every resync interval. When the
+  CA must change, the old one stays in the bundle until the next renewal.
+  Certificates from `--tls-cert-file` are reloaded too. Replicas updating the
+  webhook configuration at the same time no longer log an error.
 
 ### Security
 

@@ -1,0 +1,9 @@
+# Sigstore policy-controller for the Chainguard example
+# (chart sigstore/policy-controller 0.10.8). It checks pods in namespaces
+# labelled policy.sigstore.dev/include=true, for every identity, not only
+# agents.
+webhook:
+  configData:
+    # Images no ClusterImagePolicy covers are admitted with a warning, so the
+    # example enforces only the policies it names.
+    no-match-policy: warn

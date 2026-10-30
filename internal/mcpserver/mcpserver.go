@@ -186,6 +186,10 @@ type PolicyOutput struct {
 	Rules               []string `json:"rules"`
 	FreezeWindows       []string `json:"freezeWindows,omitempty"`
 	ApprovalTTL         string   `json:"approvalTTL"`
+	// TrustedImages and RequireDigest tell the agent which images it can
+	// deploy without a hold.
+	TrustedImages []string `json:"trustedImages,omitempty"`
+	RequireDigest bool     `json:"requireDigest,omitempty"`
 }
 
 func (s *Server) policySummary(_ context.Context, _ *mcp.CallToolRequest, _ PolicyInput) (*mcp.CallToolResult, PolicyOutput, error) {
@@ -196,6 +200,8 @@ func (s *Server) policySummary(_ context.Context, _ *mcp.CallToolRequest, _ Poli
 		DenyThreshold:       p.Spec.Thresholds.Deny,
 		ProtectedNamespaces: p.Spec.ProtectedNamespaces,
 		ApprovalTTL:         p.Spec.Approvals.TTL.Duration.String(),
+		TrustedImages:       p.Spec.Images.Trusted,
+		RequireDigest:       p.Spec.Images.RequireDigest,
 	}
 	for _, w := range p.Spec.FreezeWindows {
 		out.FreezeWindows = append(out.FreezeWindows, describeWindow(w))

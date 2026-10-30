@@ -78,6 +78,22 @@ create.
 |---|---|
 | A new or changed pod spec (Pod, workload template, CronJob job template) requests `hostNetwork`, `hostPID`, `hostIPC`, a `hostPath` volume, `privileged: true`, or adds `SYS_ADMIN`, `NET_ADMIN`, `SYS_PTRACE` or `ALL` capabilities that the old spec did not have | +40 |
 
+## Images (opt-in)
+
+Off unless the policy sets [`spec.images`](policy.md#specimages). These
+factors catch an agent, perhaps prompt-injected, that swaps in an image from an
+unknown source or one whose tag can silently move.
+
+| Condition | Points |
+|---|---|
+| A new or changed pod spec adds an image (in any container, init or ephemeral container) whose repository matches none of `spec.images.trusted` | +30 (runs images from outside the trusted repositories) |
+| `spec.images.requireDigest` is set and an added image is not pinned by digest (`image@sha256:…`) | +10 (runs images not pinned by digest) |
+
+Only images the old spec did not already run count, so an unrelated update,
+such as a scale, adds nothing. Repositories are compared without tag or
+digest, with Docker Hub's defaults made explicit (`nginx:1.27` is
+`docker.io/library/nginx`).
+
 ## Scope
 
 | Condition | Points |
@@ -117,6 +133,16 @@ From [pkg/risk/risk_test.go](../pkg/risk/risk_test.go), with `prod` and
 | Proxy into a node's kubelet (`nodes/proxy`) | CONNECT 35, kubelet 40, cluster-scoped 10 | 85 | deny |
 | Create a CertificateSigningRequest | CREATE 5, client certificate 25, cluster-scoped 10 | 40 | hold |
 | Approve a CertificateSigningRequest | UPDATE 10, approval 45, cluster-scoped 10 | 65 | hold |
+
+With `spec.images` trusting `cgr.dev/chainguard/*` and requiring digests
+(from [pkg/risk/image_test.go](../pkg/risk/image_test.go)):
+
+| Change | Factors | Score | Verdict |
+|---|---|---|---|
+| Create a Deployment running `nginx:latest` | CREATE 5, Deployment 5, untrusted 30, unpinned 10 | 50 | hold |
+| Create a Deployment running `cgr.dev/chainguard/nginx:latest` | CREATE 5, Deployment 5, unpinned 10 | 20 | allow |
+| Create a Deployment running `cgr.dev/chainguard/nginx@sha256:…` | CREATE 5, Deployment 5 | 10 | allow |
+| Swap `shop/checkout`'s pinned Chainguard image for `evil.example.com/nginx:latest` (trusted list only) | UPDATE 10, Deployment 5, image 10, untrusted 30 | 55 | hold |
 
 ## Tuning
 

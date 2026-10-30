@@ -1,0 +1,6 @@
+# Build outputs of the melange and apko commands in ../README.md.
+packages/
+melange.rsa
+melange.rsa.pub
+*.tar
+sbom-*.spdx.json
