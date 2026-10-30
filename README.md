@@ -12,7 +12,7 @@
   <a href="https://github.com/kubeamber/kubeamber/releases"><img alt="Release" src="https://img.shields.io/github/v/release/kubeamber/kubeamber"></a>
   <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/kubeamber/kubeamber"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/kubeamber/kubeamber/badge"></a>
-  <a href="https://m8ven.ai/mcp/kubeamber/kubeamber"><img alt="M8ven" src="https://m8ven.ai/badge/mcp/kubeamber/kubeamber?variant=verified"></a>
+  <a href="https://m8ven.ai/mcp/kubeamber-kubeamber-s5ws4j?s=readme"><img alt="M8ven" src="https://m8ven.ai/badge/mcp/kubeamber-kubeamber-s5ws4j?v=5f02f103da628736f7a92e341f3422f8&variant=verified"></a>
 </p>
 
 AI agents such as kagent, HolmesGPT, kubectl-ai and Claude Code now get write
