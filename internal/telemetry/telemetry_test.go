@@ -46,6 +46,8 @@ func TestSetupServesPrometheusMetrics(t *testing.T) {
 		`target_info{`,
 		`service_name="kubeamber"`,
 		`go_goroutines `,
+		`kubeamber_build_info{goversion="go`,
+		`version="test"} 1`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics output lacks %q:\n%s", want, body)

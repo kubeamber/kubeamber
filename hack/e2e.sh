@@ -279,7 +279,7 @@ check "  ...so the agent can do nothing" blocked "[Ff]orbidden|Unauthorized" -- 
 wait_for 30 sh -c "kubectl --kubeconfig $WORK/claude.kubeconfig -n shop get pods 2>&1 | grep -q Unauthorized"
 check "  ...and within seconds its token is rejected outright" blocked "Unauthorized" -- claude_kubectl -n shop get pods
 
-step "11. Prometheus can scrape KubeAmber's decisions"
+step "11. Prometheus can scrape KubeAmber's decisions, latency and approvals"
 # Each replica counts the requests it reviewed, so read every replica (one that
 # is shutting down may not answer).
 scrape_all() {
@@ -292,6 +292,18 @@ check "decisions are counted by agent and outcome" allowed \
   'kubeamber_decisions_total\{[^}]*gen_ai_agent_name="sre-agent"[^}]*kubeamber_outcome="hold"' -- scrape_all
 check "  ...denials too" allowed 'kubeamber_decisions_total\{[^}]*kubeamber_outcome="deny"' -- scrape_all
 check "risk scores are recorded as a histogram" allowed 'kubeamber_risk_score_bucket\{[^}]*le="30"' -- scrape_all
+check "review latency is recorded by outcome" allowed \
+  'kubeamber_review_duration_seconds_bucket\{[^}]*kubeamber_outcome="hold"[^}]*le="5"\} [1-9]' -- scrape_all
+check "the wait for a decision is recorded, for approvals here" allowed \
+  'kubeamber_approval_wait_seconds_count\{[^}]*kubeamber_decision="approved"[^}]*kubeamber_decision_source="cluster"[^}]*\} [1-9]' -- scrape_all
+check "  ...rejections" allowed \
+  'kubeamber_approval_wait_seconds_count\{[^}]*kubeamber_decision="rejected"[^}]*\} [1-9]' -- scrape_all
+check "  ...and approvals in ServiceNow" allowed \
+  'kubeamber_approval_wait_seconds_count\{[^}]*kubeamber_decision_source="servicenow"[^}]*\} [1-9]' -- scrape_all
+check "change requests are counted by phase" allowed 'kubeamber_change_requests\{[^}]*kubeamber_phase="Pending"[^}]*\} [1-9]' -- scrape_all
+check "  ...used ones" allowed 'kubeamber_change_requests\{[^}]*kubeamber_phase="Consumed"[^}]*\} [1-9]' -- scrape_all
+check "  ...and rejected ones" allowed 'kubeamber_change_requests\{[^}]*kubeamber_phase="Rejected"[^}]*\} [1-9]' -- scrape_all
+check "each replica reports its version" allowed 'kubeamber_build_info\{goversion="go[0-9.]+",version="[^"]+"\} 1' -- scrape_all
 
 step "12. People hear about held changes in Slack, Teams or a webhook (simulated)"
 HOOK_ADDR=${HOOK_ADDR:-127.0.0.1:18081}

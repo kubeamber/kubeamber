@@ -85,9 +85,11 @@ type Handler struct {
 	Events        events.EventRecorder
 	EventOutcomes map[string]bool
 
-	tracer    trace.Tracer
-	decisions metric.Int64Counter
-	scores    metric.Int64Histogram
+	tracer       trace.Tracer
+	decisions    metric.Int64Counter
+	scores       metric.Int64Histogram
+	latency      metric.Float64Histogram
+	approvalWait metric.Float64Histogram
 }
 
 const instrumentation = "github.com/kubeamber/kubeamber/internal/webhook"
@@ -108,6 +110,16 @@ func NewHandler(h Handler) *Handler {
 	h.scores, _ = meter.Int64Histogram("kubeamber.risk.score",
 		metric.WithDescription("Risk score of agent changes."),
 		metric.WithExplicitBucketBoundaries(10, 20, 30, 40, 50, 60, 70, 80, 90, 100))
+	// The API server gives the webhook 5 seconds; the top buckets show how
+	// close reviews come to that.
+	h.latency, _ = meter.Float64Histogram("kubeamber.review.duration",
+		metric.WithDescription("Time to review an agent change, by outcome."),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5))
+	h.approvalWait, _ = meter.Float64Histogram("kubeamber.approval.wait",
+		metric.WithDescription("Time from a held change to a person's decision on it, by decision and where it was made."),
+		metric.WithUnit("s"),
+		metric.WithExplicitBucketBoundaries(60, 300, 900, 1800, 3600, 4*3600, 24*3600, 7*24*3600))
 	return &h
 }
 
@@ -153,6 +165,7 @@ func (h *Handler) reviewChange(ctx context.Context, req *admissionv1.AdmissionRe
 	if g := req.Resource.Group; g == "authorization.k8s.io" || g == "authentication.k8s.io" {
 		return &admissionv1.AdmissionResponse{Allowed: true}
 	}
+	start := time.Now()
 	change, err := toChange(req)
 	if err != nil {
 		return deny(fmt.Sprintf("kubeamber: DENY: could not decode the request (%v)", err))
@@ -202,6 +215,7 @@ func (h *Handler) reviewChange(ctx context.Context, req *admissionv1.AdmissionRe
 	}
 	h.decisions.Add(ctx, 1, metric.WithAttributes(attrs...))
 	h.scores.Record(ctx, int64(d.Score), metric.WithAttributes(attrs[0]))
+	h.latency.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(attrs[1]))
 	span.SetAttributes(append(attrs,
 		attribute.String("kubeamber.verdict", string(d.Verdict)),
 		attribute.Int("kubeamber.risk.score", d.Score),
@@ -357,7 +371,7 @@ func (h *Handler) reviewChangeRequest(req *admissionv1.AdmissionRequest) *admiss
 		return deny("kubeamber: DENY: status.consumedAt is set by KubeAmber when the change is applied")
 	}
 	if bridge {
-		return h.reviewBridgeUpdate(req.Name, oldCR, newCR)
+		return h.reviewBridgeUpdate(req, oldCR, newCR)
 	}
 
 	if !reflect.DeepEqual(oldCR.Status.External, newCR.Status.External) {
@@ -392,13 +406,15 @@ func (h *Handler) reviewChangeRequest(req *admissionv1.AdmissionRequest) *admiss
 	}
 	h.Log.Info("change request decided", "changeRequest", req.Name, "decision", a.Decision, "by", user,
 		"agent", oldCR.Spec.Agent, "reason", a.Reason)
+	h.recordApprovalWait(req, oldCR, a)
 	return &admissionv1.AdmissionResponse{Allowed: true}
 }
 
 // reviewBridgeUpdate enforces what the change-management bridge may write:
 // one immutable ticket link, its mirrored state, and the decision made on
 // that ticket.
-func (h *Handler) reviewBridgeUpdate(name string, oldCR, newCR *changerequest.ChangeRequest) *admissionv1.AdmissionResponse {
+func (h *Handler) reviewBridgeUpdate(req *admissionv1.AdmissionRequest, oldCR, newCR *changerequest.ChangeRequest) *admissionv1.AdmissionResponse {
+	name := req.Name
 	oe, ne := oldCR.Status.External, newCR.Status.External
 	switch {
 	case oe != nil && ne == nil:
@@ -427,7 +443,40 @@ func (h *Handler) reviewBridgeUpdate(name string, oldCR, newCR *changerequest.Ch
 	}
 	h.Log.Info("change request decided externally", "changeRequest", name, "decision", a.Decision, "by", a.By,
 		"ticket", ne.Number, "system", ne.System, "agent", oldCR.Spec.Agent)
+	h.recordApprovalWait(req, oldCR, a)
 	return &admissionv1.AdmissionResponse{Allowed: true}
+}
+
+// outcomes are the values of kubeamber.outcome.
+var outcomes = []string{string(policy.Allow), string(policy.Hold), string(policy.Deny), "approved", "rejected"}
+
+// InitDecisionCounts starts the decision counter of every agent in the policy
+// at zero for each outcome. Prometheus's increase() cannot see the first
+// decision of a series that appears at 1, so without this an agent's first
+// hold or denial after a restart would be missing from dashboards and alerts.
+func (h *Handler) InitDecisionCounts(p *policy.Policy) {
+	for _, a := range p.Spec.Agents {
+		for _, o := range outcomes {
+			h.decisions.Add(context.Background(), 0, metric.WithAttributes(
+				attribute.String("gen_ai.agent.name", a.Name), attribute.String("kubeamber.outcome", o)))
+		}
+	}
+}
+
+// recordApprovalWait records how long a held change waited for the decision
+// being admitted, and where the decision was made. A dry run decides nothing.
+func (h *Handler) recordApprovalWait(req *admissionv1.AdmissionRequest, cr *changerequest.ChangeRequest, a *changerequest.Approval) {
+	if (req.DryRun != nil && *req.DryRun) || cr.CreationTimestamp.IsZero() || a == nil {
+		return
+	}
+	source := a.Source
+	if source == "" {
+		source = "cluster"
+	}
+	wait := max(0, a.At.Sub(cr.CreationTimestamp.Time).Seconds())
+	h.approvalWait.Record(context.Background(), wait, metric.WithAttributes(
+		attribute.String("kubeamber.decision", strings.ToLower(string(a.Decision))),
+		attribute.String("kubeamber.decision.source", source)))
 }
 
 // checkDecision validates a newly recorded decision, whoever records it, and

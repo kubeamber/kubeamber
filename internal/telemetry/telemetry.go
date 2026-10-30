@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"runtime"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -17,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	otelprometheus "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -96,6 +98,16 @@ func Setup(ctx context.Context, version string, scrape bool) (http.Handler, func
 	mp := sdkmetric.NewMeterProvider(opts...)
 	otel.SetMeterProvider(mp)
 	stops = append(stops, mp.Shutdown)
+	// One series per running replica, whether metrics are scraped or pushed,
+	// so dashboards and alerts can find KubeAmber and notice when none runs.
+	if _, err := mp.Meter("github.com/kubeamber/kubeamber/internal/telemetry").Int64ObservableGauge("kubeamber.build.info",
+		metric.WithDescription("Always 1, labelled with the running KubeAmber version and the Go version it was built with."),
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(1, metric.WithAttributes(attribute.String("version", version), attribute.String("goversion", runtime.Version())))
+			return nil
+		})); err != nil {
+		return nil, nil, err
+	}
 
 	return handler, func(ctx context.Context) error {
 		var errs []error
