@@ -19,7 +19,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: web
-          image: cgr.dev/chainguard/nginx:latest@sha256:16d0e55ffe62f55744d9b903d8eb57e533d0f660332a9fbb967d78b4e77c8bdb
+          image: cgr.dev/chainguard/nginx:latest@sha256:c1642395cc75f39c931d66d939f7e78cbdf671d6cfd821616632b0639c3c6d63
           ports:
             - containerPort: 8080
           resources:
