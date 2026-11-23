@@ -2,7 +2,7 @@
 # (make docker-build-local), so nothing is downloaded or compiled inside
 # Docker. Releases use the multi-stage Dockerfile at the repository root;
 # keep the base image and digest the same as its runtime stage.
-FROM cgr.dev/chainguard/static:latest@sha256:fc42af33e643f20d08baf03cddcc1c02ba57052dfb02edb0d79f3fc47bcea8d9
+FROM cgr.dev/chainguard/static:latest@sha256:8658e9eaeb2294fa0e49b0667f7d66b4e21fa7690b8d2a4c30cd1d013ceb9eb7
 COPY bin/linux/kubeamber /kubeamber
 USER 65532:65532
 ENTRYPOINT ["/kubeamber"]
